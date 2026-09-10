@@ -229,6 +229,15 @@ export interface POSMobileEfetuarPagamentoPedido {
   referencia: string;
 
   valorEntregue: number;
+
+  /**
+   * Controla se a venda deve imprimir dentro do
+   * EfetuarPagamento.
+   *
+   * No POS Mobile enviamos false para a faturação
+   * não ficar bloqueada à espera da impressora.
+   */
+  imprimir?: boolean;
 }
 
 export interface POSMobileEfetuarPagamentoDados {

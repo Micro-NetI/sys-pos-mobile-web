@@ -88,14 +88,43 @@ function obterStatusErro(
 export async function POST(
   request: NextRequest,
 ) {
+  const inicio = Date.now();
+
+  console.log(
+    "[POSMobile][GerarConsultaMesa] 01 - ENTRADA",
+  );
+
   let pedido:
     GerarConsultaMesaPedido;
 
   try {
+    console.log(
+      "[POSMobile][GerarConsultaMesa] 02 - ANTES request.json()",
+    );
+
     pedido =
       (await request.json()) as
         GerarConsultaMesaPedido;
-  } catch {
+
+    console.log(
+      "[POSMobile][GerarConsultaMesa] 03 - DEPOIS request.json()",
+      {
+        idMovimentoMesa:
+          pedido?.idMovimentoMesa,
+        idInternoConta:
+          pedido?.idInternoConta,
+        temAccessToken:
+          typeof pedido?.accessToken ===
+            "string" &&
+          pedido.accessToken.trim() !== "",
+      },
+    );
+  } catch (error) {
+    console.error(
+      "[POSMobile][GerarConsultaMesa] ERRO JSON:",
+      error,
+    );
+
     return respostaErro(
       400,
       "JSON_INVALIDO",
@@ -107,6 +136,10 @@ export async function POST(
     !pedido ||
     typeof pedido !== "object"
   ) {
+    console.log(
+      "[POSMobile][GerarConsultaMesa] DADOS INVÁLIDOS",
+    );
+
     return respostaErro(
       400,
       "DADOS_CONSULTA_MESA_INVALIDOS",
@@ -119,6 +152,10 @@ export async function POST(
       "string" ||
     pedido.accessToken.trim() === ""
   ) {
+    console.log(
+      "[POSMobile][GerarConsultaMesa] TOKEN INVÁLIDO",
+    );
+
     return respostaErro(
       400,
       "TOKEN_OBRIGATORIO",
@@ -131,6 +168,11 @@ export async function POST(
       pedido.idMovimentoMesa,
     )
   ) {
+    console.log(
+      "[POSMobile][GerarConsultaMesa] MOVIMENTO INVÁLIDO",
+      pedido.idMovimentoMesa,
+    );
+
     return respostaErro(
       400,
       "MOVIMENTO_MESA_INVALIDO",
@@ -143,6 +185,11 @@ export async function POST(
       pedido.idInternoConta,
     )
   ) {
+    console.log(
+      "[POSMobile][GerarConsultaMesa] CONTA INVÁLIDA",
+      pedido.idInternoConta,
+    );
+
     return respostaErro(
       400,
       "CONTA_INVALIDA",
@@ -163,6 +210,21 @@ export async function POST(
     };
 
   try {
+    console.log(
+      "[POSMobile][GerarConsultaMesa] 04 - ANTES APIFNT",
+      {
+        idMovimentoMesa:
+          pedidoNormalizado.idMovimentoMesa,
+
+        idInternoConta:
+          pedidoNormalizado.idInternoConta,
+
+        ms:
+          Date.now() -
+          inicio,
+      },
+    );
+
     const resultado =
       await callPosMobileApi<
         GerarConsultaMesaDados
@@ -171,26 +233,81 @@ export async function POST(
         pedidoNormalizado,
       );
 
-    return NextResponse.json(
-      resultado,
+    console.log(
+      "[POSMobile][GerarConsultaMesa] 05 - DEPOIS APIFNT",
       {
-        status:
-          resultado.sucesso
-            ? 200
-            : obterStatusErro(
-                resultado.codigo,
-              ),
+        sucesso:
+          resultado.sucesso,
 
-        headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate",
-        },
+        codigo:
+          resultado.codigo,
+
+        mensagem:
+          resultado.mensagem,
+
+        dados:
+          resultado.dados,
+
+        ms:
+          Date.now() -
+          inicio,
       },
     );
+
+    const status =
+      resultado.sucesso
+        ? 200
+        : obterStatusErro(
+            resultado.codigo,
+          );
+
+    console.log(
+      "[POSMobile][GerarConsultaMesa] 06 - ANTES RESPOSTA NEXT",
+      {
+        status,
+        ms:
+          Date.now() -
+          inicio,
+      },
+    );
+
+    const resposta =
+      NextResponse.json(
+        resultado,
+        {
+          status,
+
+          headers: {
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate",
+          },
+        },
+      );
+
+    console.log(
+      "[POSMobile][GerarConsultaMesa] 07 - RESPOSTA PREPARADA",
+      {
+        status,
+        ms:
+          Date.now() -
+          inicio,
+      },
+    );
+
+    return resposta;
   } catch (error) {
     console.error(
-      "[POSMobile][GerarConsultaMesa] Erro:",
-      error,
+      "[POSMobile][GerarConsultaMesa] ERRO APIFNT",
+      {
+        erro:
+          error instanceof Error
+            ? error.message
+            : error,
+
+        ms:
+          Date.now() -
+          inicio,
+      },
     );
 
     return respostaErro(

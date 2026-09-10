@@ -335,3 +335,303 @@ export async function obterContextoPosto(
 
   return resposta;
 }
+
+/* ==========================================================================
+   PAGAMENTOS INTEGRADOS / TPA
+   ========================================================================== */
+
+export interface PagamentoClientePedido {
+  idEntidade: number;
+}
+
+export interface PagamentoPedido {
+  accessToken: string;
+
+  idMovimentoMesa: number;
+  idInternoConta: number;
+  idPagamentoDoc: number;
+
+  cliente: PagamentoClientePedido;
+
+  idTipoServico?: number;
+  idTipoRefeicao?: number;
+  idMercado?: number;
+
+  idTipoDesconto?: number;
+  idMotivoDesconto?: number;
+  justificacaoDesconto?: string;
+
+  referencia?: string;
+  valorEntregue?: number;
+
+  imprimir?: boolean;
+  enviarEmail?: boolean;
+  email?: string;
+
+  idReservaHotel?: number;
+}
+
+export interface PagamentoIntegradoDados {
+  pedidoId: string;
+  estado: string;
+  transactionId: string;
+  referencia: string;
+
+  valor: number;
+  valorCentimos: number;
+
+  idVndCabDocumento: number;
+  documento: string;
+}
+
+
+/* ==========================================================================
+   INICIAR PAGAMENTO INTEGRADO
+   ========================================================================== */
+
+export async function iniciarPagamentoIntegrado(
+  pedido: PagamentoPedido,
+): Promise<
+  ApiResponse<PagamentoIntegradoDados>
+> {
+  if (
+    !pedido ||
+    typeof pedido.accessToken !==
+      "string" ||
+    pedido.accessToken.trim() === ""
+  ) {
+    throw new Error(
+      "O token da sessão deve ser indicado.",
+    );
+  }
+
+  if (
+    !Number.isInteger(
+      pedido.idMovimentoMesa,
+    ) ||
+    pedido.idMovimentoMesa <= 0
+  ) {
+    throw new Error(
+      "O movimento da mesa é inválido.",
+    );
+  }
+
+  if (
+    !Number.isInteger(
+      pedido.idInternoConta,
+    ) ||
+    pedido.idInternoConta <= 0
+  ) {
+    throw new Error(
+      "A conta é inválida.",
+    );
+  }
+
+  if (
+    !Number.isInteger(
+      pedido.idPagamentoDoc,
+    ) ||
+    pedido.idPagamentoDoc <= 0
+  ) {
+    throw new Error(
+      "O pagamento é inválido.",
+    );
+  }
+
+  if (
+    !pedido.cliente ||
+    !Number.isInteger(
+      pedido.cliente.idEntidade,
+    ) ||
+    pedido.cliente.idEntidade <= 0
+  ) {
+    throw new Error(
+      "O cliente do pagamento é inválido.",
+    );
+  }
+
+  console.log(
+    "========== INICIAR PAGAMENTO INTEGRADO ==========",
+  );
+
+  console.log(
+    "Pedido:",
+    pedido,
+  );
+
+  return callPosMobileApi<
+    PagamentoIntegradoDados
+  >(
+    "IniciarPagamentoIntegrado",
+    {
+      ...pedido,
+
+      accessToken:
+        pedido.accessToken.trim(),
+    },
+  );
+}
+
+
+/* ==========================================================================
+   CONSULTAR ESTADO DO PAGAMENTO INTEGRADO
+   ========================================================================== */
+
+export async function obterEstadoPagamentoIntegrado(
+  accessToken: string,
+  pedidoId: string,
+): Promise<
+  ApiResponse<PagamentoIntegradoDados>
+> {
+  const token =
+    accessToken?.trim() ?? "";
+
+  const idPedido =
+    pedidoId?.trim() ?? "";
+
+  if (!token) {
+    throw new Error(
+      "O token da sessão deve ser indicado.",
+    );
+  }
+
+  if (!idPedido) {
+    throw new Error(
+      "O identificador do pedido de pagamento deve ser indicado.",
+    );
+  }
+
+  console.log(
+    "========== ESTADO PAGAMENTO INTEGRADO ==========",
+  );
+
+  console.log(
+    "PedidoId:",
+    idPedido,
+  );
+
+  return callPosMobileApi<
+    PagamentoIntegradoDados
+  >(
+    "EstadoPagamentoIntegrado",
+    {
+      accessToken:
+        token,
+
+      pedidoId:
+        idPedido,
+    },
+  );
+}
+
+
+/* ==========================================================================
+   FINALIZAR PAGAMENTO INTEGRADO
+   ========================================================================== */
+
+export async function finalizarPagamentoIntegrado(
+  accessToken: string,
+  pedidoId: string,
+  pagamento: Omit<
+    PagamentoPedido,
+    "accessToken"
+  >,
+): Promise<
+  ApiResponse<PagamentoIntegradoDados>
+> {
+  const token =
+    accessToken?.trim() ?? "";
+
+  const idPedido =
+    pedidoId?.trim() ?? "";
+
+  if (!token) {
+    throw new Error(
+      "O token da sessão deve ser indicado.",
+    );
+  }
+
+  if (!idPedido) {
+    throw new Error(
+      "O identificador do pedido de pagamento deve ser indicado.",
+    );
+  }
+
+  if (!pagamento) {
+    throw new Error(
+      "Os dados do pagamento devem ser indicados.",
+    );
+  }
+
+  console.log(
+    "========== FINALIZAR PAGAMENTO INTEGRADO ==========",
+  );
+
+  console.log(
+    "PedidoId:",
+    idPedido,
+  );
+
+  console.log(
+    "Pagamento:",
+    pagamento,
+  );
+
+  return callPosMobileApi<
+    PagamentoIntegradoDados
+  >(
+    "FinalizarPagamentoIntegrado",
+    {
+      accessToken:
+        token,
+
+      pedidoId:
+        idPedido,
+
+      pagamento,
+    },
+  );
+}
+
+
+/* ==========================================================================
+   AUXILIARES DO FLUXO TPA
+   ========================================================================== */
+
+export function pagamentoIntegradoTerminou(
+  estado: string,
+): boolean {
+  const estadoNormalizado =
+    estado
+      ?.trim()
+      .toUpperCase() ?? "";
+
+  return [
+    "APROVADO",
+    "RECUSADO",
+    "CANCELADO",
+    "ERRO",
+    "ERRO_ENVIO",
+    "EXPIRADO",
+    "ASSOCIADO_VENDA",
+    "ERRO_GRAVACAO_VENDA",
+  ].includes(
+    estadoNormalizado,
+  );
+}
+
+export function pagamentoIntegradoAprovado(
+  estado: string,
+): boolean {
+  const estadoNormalizado =
+    estado
+      ?.trim()
+      .toUpperCase() ?? "";
+
+  return (
+    estadoNormalizado ===
+      "APROVADO" ||
+    estadoNormalizado ===
+      "ASSOCIADO_VENDA"
+  );
+}

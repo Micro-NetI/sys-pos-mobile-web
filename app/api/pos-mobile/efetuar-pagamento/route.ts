@@ -1,4 +1,4 @@
-//app\api\pos-mobile\efetuar-pagamento\route.ts
+// app\api\pos-mobile\efetuar-pagamento\route.ts
 import {
   NextRequest,
   NextResponse,
@@ -15,7 +15,9 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-function inteiroPositivo(valor: unknown): valor is number {
+function inteiroPositivo(
+  valor: unknown,
+): valor is number {
   return (
     typeof valor === "number" &&
     Number.isInteger(valor) &&
@@ -23,7 +25,9 @@ function inteiroPositivo(valor: unknown): valor is number {
   );
 }
 
-function inteiroNaoNegativo(valor: unknown): valor is number {
+function inteiroNaoNegativo(
+  valor: unknown,
+): valor is number {
   return (
     typeof valor === "number" &&
     Number.isInteger(valor) &&
@@ -31,7 +35,9 @@ function inteiroNaoNegativo(valor: unknown): valor is number {
   );
 }
 
-function numeroNaoNegativo(valor: unknown): valor is number {
+function numeroNaoNegativo(
+  valor: unknown,
+): valor is number {
   return (
     typeof valor === "number" &&
     Number.isFinite(valor) &&
@@ -193,6 +199,24 @@ export async function POST(
     );
   }
 
+  /*
+    O pagamento POS Mobile é gravado sem esperar pela impressora.
+    Se a propriedade não vier, assumimos false nesta rota.
+  */
+  if (
+    pedido.imprimir !== undefined &&
+    typeof pedido.imprimir !== "boolean"
+  ) {
+    return respostaErro(
+      400,
+      "IMPRIMIR_INVALIDO",
+      "A indicação de impressão é inválida.",
+    );
+  }
+
+  const imprimir =
+    pedido.imprimir ?? false;
+
   console.group(
     "========== EFETUAR PAGAMENTO - NEXT ==========",
   );
@@ -222,6 +246,7 @@ export async function POST(
       pedido.referencia,
     valorEntregue:
       pedido.valorEntregue,
+    imprimir,
   });
 
   console.groupEnd();
@@ -259,6 +284,15 @@ export async function POST(
             pedido.referencia.trim(),
           valorEntregue:
             pedido.valorEntregue,
+
+          /*
+            MUITO IMPORTANTE:
+            não retirar este campo.
+
+            Se não for enviado, o Delphi mantém:
+              FImprimir := True
+          */
+          imprimir,
         },
       ) as POSMobileEfetuarPagamentoResposta;
 
@@ -293,9 +327,13 @@ export async function POST(
               "MOTIVO_DESCONTO_INVALIDO",
               "JUSTIFICACAO_DESCONTO_OBRIGATORIA",
               "MULTIPAGAMENTO_NAO_SUPORTADO",
+              "IMPRIMIR_INVALIDO",
             ].includes(resultado.codigo)
             ? 400
-            : 422;
+            : resultado.codigo ===
+                "SISTEMA_OCUPADO"
+              ? 409
+              : 422;
 
     return NextResponse.json(
       resultado,

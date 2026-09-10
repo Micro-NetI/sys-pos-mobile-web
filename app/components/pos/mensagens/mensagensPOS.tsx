@@ -1,4 +1,4 @@
-"use client";
+
 
 import type {
   ReactNode,
@@ -41,6 +41,9 @@ function formatarValor(
 
 let confirmacaoPagamentoAberta = false;
 let confirmacaoPagamentoId: string | null = null;
+
+let confirmacaoImpressaoAberta = false;
+let confirmacaoImpressaoId: string | null = null;
 
 export const mensagensPOS = {
   /*
@@ -406,6 +409,183 @@ confirmarPagamento({
     },
   );
 },
+
+
+  /*
+    ==============================================================
+    CONFIRMAR IMPRESSÃO DO TALÃO
+    ==============================================================
+
+    Resultado:
+
+      true  -> Sim, imprimir depois de a venda estar gravada
+      false -> Não imprimir
+
+    A impressão continua fora do EfetuarPagamento.
+    Este Toast decide apenas se deve ser feita a chamada posterior
+    a solicitarImpressaoVenda(...).
+  */
+
+  confirmarImpressao(): Promise<boolean> {
+    if (confirmacaoImpressaoAberta) {
+      console.warn(
+        "Confirmação de impressão ignorada: já existe uma confirmação aberta.",
+      );
+
+      return Promise.resolve(false);
+    }
+
+    confirmacaoImpressaoAberta = true;
+
+    return new Promise<boolean>(
+      (resolve) => {
+        let resolvido = false;
+        let idToast = "";
+
+        const libertarConfirmacao = () => {
+          confirmacaoImpressaoAberta = false;
+          confirmacaoImpressaoId = null;
+        };
+
+        const concluir = (
+          imprimir: boolean,
+        ) => {
+          if (resolvido) {
+            return;
+          }
+
+          resolvido = true;
+          resolve(imprimir);
+        };
+
+        const fecharToast = () => {
+          if (idToast) {
+            toast.close(idToast);
+          }
+        };
+
+        try {
+          idToast =
+            toast.warning(
+              "Imprimir talão",
+              {
+                description: (
+                  <div className="mt-1 space-y-3">
+                    <p
+                      className="
+                        text-sm
+                        leading-5
+                        text-slate-700
+                      "
+                    >
+                      Deseja imprimir o talão?
+                    </p>
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          concluir(
+                            false,
+                          );
+
+                          libertarConfirmacao();
+
+                          fecharToast();
+                        }}
+                        className="
+                          h-9
+                          rounded-lg
+                          border
+                          border-slate-200
+                          bg-white
+                          px-4
+                          text-xs
+                          font-bold
+                          text-slate-600
+                          transition
+                          hover:bg-slate-100
+                          active:scale-[0.98]
+                        "
+                      >
+                        Não
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          concluir(
+                            true,
+                          );
+
+                          libertarConfirmacao();
+
+                          fecharToast();
+                        }}
+                        className="
+                          h-9
+                          rounded-lg
+                          bg-emerald-600
+                          px-4
+                          text-xs
+                          font-black
+                          text-white
+                          shadow-sm
+                          transition
+                          hover:bg-emerald-700
+                          active:scale-[0.98]
+                        "
+                      >
+                        Sim
+                      </button>
+                    </div>
+                  </div>
+                ),
+
+                /*
+                  Persistente:
+                  não fecha automaticamente por timeout.
+                */
+                timeout:
+                  0,
+
+                /*
+                  Fechar pelo X equivale a responder "Não".
+                */
+                onClose: () => {
+                  concluir(
+                    false,
+                  );
+
+                  libertarConfirmacao();
+                },
+              },
+            );
+
+          confirmacaoImpressaoId =
+            idToast;
+
+          console.log(
+            "CONFIRMAÇÃO IMPRESSÃO: ABERTA",
+            {
+              idToast,
+            },
+          );
+        } catch (error) {
+          libertarConfirmacao();
+
+          console.error(
+            "Não foi possível abrir a confirmação de impressão:",
+            error,
+          );
+
+          concluir(
+            false,
+          );
+        }
+      },
+    );
+  },
 
   /*
     ==============================================================

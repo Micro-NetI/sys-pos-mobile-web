@@ -9,6 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
+
+import {
+  Modal,
+} from "@heroui/react";
 import {
   useParams,
   useRouter,
@@ -238,6 +242,79 @@ interface PagamentoPreparadoContexto {
   descricaoCliente: string;
 
   pagamento: POSMobilePagamentoBotao;
+}
+
+/*
+  ============================================================================
+  PAGAMENTO INTEGRADO / TPA
+  ============================================================================
+
+  Estes contratos são locais à página e representam apenas as respostas das
+  rotas Next.js de pagamento integrado.
+
+  A decisão de utilizar integração continua a vir da resposta preparada pela
+  APIFNT. O browser não decide TipoDoc, ModoPagamento, posto ou utilizador.
+  ============================================================================
+*/
+interface PagamentoPedidoFuncional {
+  accessToken: string;
+
+  idMovimentoMesa: number;
+  idInternoConta: number;
+  idPagamentoDoc: number;
+
+  cliente: {
+    idEntidade: number;
+  };
+
+  idTipoServico: number;
+  idTipoRefeicao: number;
+  idMercado: number;
+  idTipoDesconto: number;
+  idMotivoDesconto: number;
+
+  justificacaoDesconto: string;
+  referencia: string;
+  valorEntregue: number;
+
+  /*
+    A venda é gravada sem esperar pela impressão física.
+    A impressão é solicitada depois, numa operação independente.
+  */
+  imprimir: boolean;
+}
+
+interface POSMobilePagamentoIntegradoDados {
+  pedidoId: string;
+  estado: string;
+  transactionId: string;
+  referencia: string;
+  valor: number;
+  valorCentimos: number;
+  idVndCabDocumento: number;
+  documento: string;
+}
+
+interface POSMobilePagamentoIntegradoResposta {
+  sucesso: boolean;
+  codigo: string;
+  mensagem: string;
+  versaoContrato: string;
+  dados: POSMobilePagamentoIntegradoDados | null;
+}
+
+interface PagamentoIntegradoVisual {
+  pedidoId: string;
+  estado: string;
+  mensagem: string;
+  valor: number;
+}
+
+interface PagamentoIntegradoPendente {
+  pedidoId: string;
+  idMovimentoMesa: number;
+  idInternoConta: number;
+  idPagamentoDoc: number;
 }
 
 interface ContaPersistidaResultado {
@@ -1074,6 +1151,528 @@ function lerDadosMesaGuardados():
   }
 }
 
+function normalizarEstadoPagamentoIntegrado(
+  estado: string | null | undefined,
+): string {
+  return (estado ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+function aguardar(
+  milissegundos: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(
+      resolve,
+      milissegundos,
+    );
+  });
+}
+
+function obterIntegracaoPagamentoPreparado(
+  dados: POSMobilePrepararPagamentoDados,
+): {
+  integracaoPagamento: boolean;
+  tipoIntegracaoPagamento: string;
+} {
+  /*
+    O contrato TypeScript antigo pode ainda não declarar estes dois campos.
+    A APIFNT passou a devolvê-los dentro de dados.pagamento.
+
+    O cast local mantém esta página compatível enquanto os tipos partilhados
+    são atualizados, sem transformar o browser em fonte de verdade.
+  */
+  const dadosComIntegracao =
+    dados as POSMobilePrepararPagamentoDados & {
+      pagamento?: {
+        integracaoPagamento?: boolean;
+        tipoIntegracaoPagamento?:
+          | string
+          | null;
+      };
+    };
+
+  return {
+    integracaoPagamento:
+      dadosComIntegracao.pagamento
+        ?.integracaoPagamento === true,
+
+    tipoIntegracaoPagamento:
+      normalizarEstadoPagamentoIntegrado(
+        dadosComIntegracao.pagamento
+          ?.tipoIntegracaoPagamento,
+      ),
+  };
+}
+
+/*
+  ============================================================================
+  IMPRESSÃO NÃO BLOQUEANTE
+  ============================================================================
+  A venda já está persistida quando esta função é chamada.
+
+  Não existe await no ponto de utilização: uma impressora lenta, desligada ou
+  com spooler bloqueado não atrasa o fecho da venda nem a navegação do POS.
+
+  keepalive permite ao browser continuar o pequeno pedido mesmo quando a
+  página navega imediatamente para /pos.
+  ============================================================================
+*/
+function solicitarImpressaoVenda(
+  accessToken: string,
+  idVndCabDocumento: number,
+  idPagamentoDoc: number,
+): void {
+  const token =
+    accessToken.trim();
+
+  if (
+    token === "" ||
+    !Number.isInteger(
+      idVndCabDocumento,
+    ) ||
+    idVndCabDocumento <= 0 ||
+    !Number.isInteger(
+      idPagamentoDoc,
+    ) ||
+    idPagamentoDoc <= 0
+  ) {
+    console.error(
+      "[PRINT BROWSER ERRO] Impressão não solicitada: dados inválidos.",
+      {
+        idVndCabDocumento,
+        idPagamentoDoc,
+      },
+    );
+
+    return;
+  }
+
+  /*
+    ==========================================================================
+    DIAGNÓSTICO DE TEMPOS DA IMPRESSÃO
+    ==========================================================================
+
+    Não usamos sendBeacon neste teste.
+
+    O objetivo é perceber exatamente onde está a demora:
+
+      Browser
+        ↓
+      Route Next /api/pos-mobile/pagamentos/imprimir
+        ↓
+      APIFNT / ImprimirVendaPagamento
+        ↓
+      MotorFnt.POSMovimentoMesa.ImprimirVendaPOSMobile
+        ↓
+      spooler / impressora
+
+    fetch + keepalive:
+      - inicia o pedido HTTP imediatamente;
+      - permite que o pedido continue mesmo que a página navegue;
+      - continua SEM await, portanto a venda não fica bloqueada.
+    ==========================================================================
+  */
+
+  const browserStartedAtMs =
+    Date.now();
+
+  const diagnosticoId =
+    `PRINT-${idVndCabDocumento}-${browserStartedAtMs}`;
+
+  const payload = {
+    accessToken:
+      token,
+
+    idVndCabDocumento,
+
+    idPagamentoDoc,
+
+    /*
+      Usados apenas pela Route Next para correlacionar os logs.
+      NÃO são encaminhados para a APIFNT.
+    */
+    diagnosticoId,
+
+    browserStartedAtMs,
+  };
+
+  console.log(
+    "[PRINT BROWSER 01] ANTES FETCH",
+    {
+      diagnosticoId,
+
+      hora:
+        new Date(
+          browserStartedAtMs,
+        ).toISOString(),
+
+      idVndCabDocumento,
+
+      idPagamentoDoc,
+    },
+  );
+
+  /*
+    IMPORTANTE:
+    não fazer await aqui.
+
+    A impressão continua independente da venda.
+  */
+  void fetch(
+    "/api/pos-mobile/pagamentos/imprimir",
+    {
+      method:
+        "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+
+        Accept:
+          "application/json",
+      },
+
+      body:
+        JSON.stringify(
+          payload,
+        ),
+
+      keepalive:
+        true,
+    },
+  )
+    .then(
+      async (
+        response,
+      ) => {
+        const fimMs =
+          Date.now();
+
+        console.log(
+          "[PRINT BROWSER 02] RESPOSTA NEXT",
+          {
+            diagnosticoId,
+
+            hora:
+              new Date(
+                fimMs,
+              ).toISOString(),
+
+            duracaoTotalMs:
+              fimMs -
+              browserStartedAtMs,
+
+            status:
+              response.status,
+
+            ok:
+              response.ok,
+
+            idVndCabDocumento,
+
+            idPagamentoDoc,
+
+            serverTiming:
+              response.headers.get(
+                "Server-Timing",
+              ),
+
+            traceResposta:
+              response.headers.get(
+                "X-Print-Trace-Id",
+              ),
+          },
+        );
+
+        if (
+          response.ok
+        ) {
+          return;
+        }
+
+        let detalhe =
+          "";
+
+        try {
+          detalhe =
+            await response.text();
+        } catch {
+          detalhe =
+            "";
+        }
+
+        console.error(
+          "[PRINT BROWSER ERRO] A impressão devolveu erro.",
+          {
+            diagnosticoId,
+
+            status:
+              response.status,
+
+            detalhe,
+
+            idVndCabDocumento,
+
+            idPagamentoDoc,
+          },
+        );
+      },
+    )
+    .catch(
+      (
+        error,
+      ) => {
+        const fimMs =
+          Date.now();
+
+        console.error(
+          "[PRINT BROWSER ERRO] Falha ao solicitar impressão.",
+          {
+            diagnosticoId,
+
+            hora:
+              new Date(
+                fimMs,
+              ).toISOString(),
+
+            duracaoAteErroMs:
+              fimMs -
+              browserStartedAtMs,
+
+            error,
+
+            idVndCabDocumento,
+
+            idPagamentoDoc,
+          },
+        );
+      },
+    );
+}
+
+
+/*
+  ============================================================================
+  IMPRESSÃO NÃO BLOQUEANTE - CONSULTA DE MESA
+  ============================================================================
+
+  A Consulta de Mesa já foi criada e persistida quando esta função é chamada.
+
+  Não existe await no ponto de utilização. Assim:
+    - o modal "A processar..." fecha logo após a geração da Consulta;
+    - o fluxo pode continuar para o Segue;
+    - uma demora do spooler/impressora não bloqueia a geração da Consulta;
+    - keepalive permite ao pedido continuar mesmo que a página navegue.
+
+  IMPORTANTE:
+  esta função apenas solicita a impressão. Nunca volta a gerar a Consulta.
+  ============================================================================
+*/
+function solicitarImpressaoConsultaMesa(
+  accessToken: string,
+  idMovimentoMesa: number,
+  idInternoConta: number,
+  idConsMovimento: number,
+): void {
+  const token =
+    accessToken.trim();
+
+  if (
+    token === "" ||
+    !Number.isInteger(
+      idMovimentoMesa,
+    ) ||
+    idMovimentoMesa <= 0 ||
+    !Number.isInteger(
+      idInternoConta,
+    ) ||
+    idInternoConta <= 0 ||
+    !Number.isInteger(
+      idConsMovimento,
+    ) ||
+    idConsMovimento <= 0
+  ) {
+    console.error(
+      "[CONSULTA PRINT BROWSER ERRO] Impressão não solicitada: dados inválidos.",
+      {
+        idMovimentoMesa,
+        idInternoConta,
+        idConsMovimento,
+      },
+    );
+
+    return;
+  }
+
+  const browserStartedAtMs =
+    Date.now();
+
+  const diagnosticoId =
+    `PRINT-CONSULTA-${idConsMovimento}-${browserStartedAtMs}`;
+
+  const payload = {
+    accessToken:
+      token,
+
+    idMovimentoMesa,
+
+    idInternoConta,
+
+    idConsMovimento,
+
+    diagnosticoId,
+
+    browserStartedAtMs,
+  };
+
+  console.log(
+    "[CONSULTA PRINT BROWSER 01] ANTES FETCH",
+    {
+      diagnosticoId,
+
+      hora:
+        new Date(
+          browserStartedAtMs,
+        ).toISOString(),
+
+      idMovimentoMesa,
+
+      idInternoConta,
+
+      idConsMovimento,
+    },
+  );
+
+  void fetch(
+    "/api/pos-mobile/imprimir-consulta-mesa",
+    {
+      method:
+        "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+
+        Accept:
+          "application/json",
+      },
+
+      body:
+        JSON.stringify(
+          payload,
+        ),
+
+      keepalive:
+        true,
+    },
+  )
+    .then(
+      async (
+        response,
+      ) => {
+        const fimMs =
+          Date.now();
+
+        console.log(
+          "[CONSULTA PRINT BROWSER 02] RESPOSTA NEXT",
+          {
+            diagnosticoId,
+
+            hora:
+              new Date(
+                fimMs,
+              ).toISOString(),
+
+            duracaoTotalMs:
+              fimMs -
+              browserStartedAtMs,
+
+            status:
+              response.status,
+
+            ok:
+              response.ok,
+
+            idMovimentoMesa,
+
+            idInternoConta,
+
+            idConsMovimento,
+          },
+        );
+
+        if (
+          response.ok
+        ) {
+          return;
+        }
+
+        let detalhe =
+          "";
+
+        try {
+          detalhe =
+            await response.text();
+        } catch {
+          detalhe =
+            "";
+        }
+
+        console.error(
+          "[CONSULTA PRINT BROWSER ERRO] A impressão devolveu erro.",
+          {
+            diagnosticoId,
+
+            status:
+              response.status,
+
+            detalhe,
+
+            idMovimentoMesa,
+
+            idInternoConta,
+
+            idConsMovimento,
+          },
+        );
+      },
+    )
+    .catch(
+      (
+        error,
+      ) => {
+        const fimMs =
+          Date.now();
+
+        console.error(
+          "[CONSULTA PRINT BROWSER ERRO] Falha ao solicitar impressão.",
+          {
+            diagnosticoId,
+
+            hora:
+              new Date(
+                fimMs,
+              ).toISOString(),
+
+            duracaoAteErroMs:
+              fimMs -
+              browserStartedAtMs,
+
+            error,
+
+            idMovimentoMesa,
+
+            idInternoConta,
+
+            idConsMovimento,
+          },
+        );
+      },
+    );
+}
+
 export default function MesaProfissionalPage() {
   const router = useRouter();
   const params = useParams<{
@@ -1203,6 +1802,69 @@ console.log(
   */
   const pagamentoEmSelecaoRef =
     useRef(false);
+
+  /*
+    Bloqueio síncrono da confirmação/execução do pagamento.
+
+    O useState só atualiza no render seguinte, por isso este ref impede
+    duplo clique/toque antes de a interface ficar visualmente bloqueada.
+  */
+  const pagamentoEmExecucaoRef =
+    useRef(false);
+
+  /*
+    ==========================================================================
+    CONFIRMAÇÃO DE IMPRESSÃO
+    ==========================================================================
+
+    Esta confirmação é um Modal HeroUI real, e não um Toast.
+
+    O pagamento fica literalmente à espera da Promise até o operador
+    clicar em "Sim" ou "Não".
+
+    O modal:
+      - não fecha por timeout;
+      - não fecha ao clicar no fundo;
+      - não fecha com ESC;
+      - não possui botão X;
+      - só fecha através dos botões Sim/Não.
+    ==========================================================================
+  */
+  /*
+    ==========================================================================
+    COMPORTAMENTO DA IMPRESSÃO
+    ==========================================================================
+
+    true:
+      - depois de a venda estar gravada, apresenta o Modal HeroUI
+        "Deseja imprimir o talão?"
+      - só imprime se o operador escolher "Sim".
+
+    false:
+      - não apresenta a pergunta;
+      - imprime sempre automaticamente, mas continua através da rota de
+        impressão separada;
+      - pedido.imprimir continua false, portanto nunca voltamos a prender
+        a faturação à impressão interna do Delphi.
+
+    Mais tarde este estado pode ser inicializado através da configuração
+    do posto/cliente sem alterar o fluxo do pagamento.
+    ==========================================================================
+  */
+  const [
+    perguntarAntesDeImprimir,
+  ] = useState(true);
+
+  const [
+    mostrarConfirmacaoImpressao,
+    setMostrarConfirmacaoImpressao,
+  ] = useState(false);
+
+  const resolverConfirmacaoImpressaoRef =
+    useRef<
+      ((imprimir: boolean) => void) |
+      null
+    >(null);
 
   /*
     Novo fluxo de pagamento:
@@ -1491,6 +2153,26 @@ console.log(
     idPagamentoEmProcessamento,
     setIdPagamentoEmProcessamento,
   ] = useState<number | null>(null);
+
+  /*
+    Pedido TPA que já foi criado no SysFlowTPAService mas ainda não terminou
+    o ciclo completo no browser.
+
+    É mantido num ref de propósito: perante uma falha transitória de rede, uma
+    nova confirmação retoma o MESMO PedidoId em vez de iniciar uma segunda
+    cobrança no terminal.
+  */
+  const pagamentoIntegradoPendenteRef =
+    useRef<PagamentoIntegradoPendente | null>(
+      null,
+    );
+
+  const [
+    pagamentoIntegradoVisual,
+    setPagamentoIntegradoVisual,
+  ] = useState<PagamentoIntegradoVisual | null>(
+    null,
+  );
 
   const [
     mostrarPesquisarCliente,
@@ -2598,7 +3280,9 @@ console.log(
       aEfetuarPagamento ||
       aAssociarReservaHotel ||
       mostrarReservasHotel ||
-      dadosPagamentoPreparado !== null
+      dadosPagamentoPreparado !== null ||
+      pagamentoIntegradoPendenteRef.current !==
+        null
     ) {
       return;
     }
@@ -2612,7 +3296,9 @@ console.log(
     if (
       aCarregarPagamentos ||
       aPrepararPagamento ||
-      aEfetuarPagamento
+      aEfetuarPagamento ||
+      pagamentoIntegradoPendenteRef.current !==
+        null
     ) {
       return;
     }
@@ -2665,7 +3351,20 @@ console.log(
   }
 
   function fecharConfirmacaoPagamento() {
-    if (aEfetuarPagamento) {
+    if (
+      aEfetuarPagamento ||
+      pagamentoIntegradoPendenteRef.current !==
+        null
+    ) {
+      if (
+        pagamentoIntegradoPendenteRef.current !==
+        null
+      ) {
+        setMensagemErroPagamentos(
+          "Existe um pagamento TPA em curso ou com resultado por confirmar. Volte a confirmar para retomar a consulta do mesmo pedido.",
+        );
+      }
+
       return;
     }
 
@@ -2864,7 +3563,9 @@ console.log(
       aEfetuarPagamento ||
       aAssociarReservaHotel ||
       mostrarReservasHotel ||
-      dadosPagamentoPreparado !== null
+      dadosPagamentoPreparado !== null ||
+      pagamentoIntegradoPendenteRef.current !==
+        null
     ) {
       console.warn(
         "Seleção de pagamento ignorada: já existe uma operação de pagamento em curso.",
@@ -3149,10 +3850,551 @@ console.log(
   }
 
 
+  async function executarFluxoPagamentoIntegrado(
+    pedido: PagamentoPedidoFuncional,
+    valorPreparado: number,
+  ): Promise<POSMobilePagamentoIntegradoDados> {
+    const estadosFinalizaveis =
+      new Set([
+        "APROVADO",
+        "ERRO_GRAVACAO_VENDA",
+        "ASSOCIADO_VENDA",
+      ]);
+
+    const estadosFalha =
+      new Set([
+        "RECUSADO",
+        "CANCELADO",
+        "ERRO",
+        "ERRO_ENVIO",
+        "EXPIRADO",
+      ]);
+
+    let pedidoId = "";
+    let estadoAtual = "";
+    let valorAtual = valorPreparado;
+
+    const pendenteAtual =
+      pagamentoIntegradoPendenteRef.current;
+
+    if (pendenteAtual) {
+      if (
+        pendenteAtual.idMovimentoMesa !==
+          pedido.idMovimentoMesa ||
+        pendenteAtual.idInternoConta !==
+          pedido.idInternoConta ||
+        pendenteAtual.idPagamentoDoc !==
+          pedido.idPagamentoDoc
+      ) {
+        throw new Error(
+          "Existe outro pagamento TPA pendente de confirmação. Não é possível iniciar um novo pagamento enquanto o anterior não for resolvido.",
+        );
+      }
+
+      pedidoId =
+        pendenteAtual.pedidoId;
+
+      setPagamentoIntegradoVisual({
+        pedidoId,
+        estado: "A_RETOMAR",
+        mensagem:
+          "A retomar a consulta do pagamento já iniciado no terminal...",
+        valor: valorAtual,
+      });
+    } else {
+      setPagamentoIntegradoVisual({
+        pedidoId: "",
+        estado: "A_INICIAR",
+        mensagem:
+          "A enviar o pagamento para o terminal...",
+        valor: valorAtual,
+      });
+
+      console.group(
+        "========== INICIAR PAGAMENTO INTEGRADO ==========" ,
+      );
+
+      console.log(
+        "Pedido:",
+        pedido,
+      );
+
+      const responseInicio =
+        await fetch(
+          "/api/pos-mobile/pagamentos/iniciar-integrado",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+            body:
+              JSON.stringify(
+                pedido,
+              ),
+          },
+        );
+
+      const resultadoInicio =
+        (await responseInicio.json()) as
+          POSMobilePagamentoIntegradoResposta;
+
+      console.log(
+        "HTTP status:",
+        responseInicio.status,
+      );
+
+      console.log(
+        "Resposta:",
+        resultadoInicio,
+      );
+
+      console.groupEnd();
+
+      if (
+        responseInicio.status === 401
+      ) {
+        sessionStorage.removeItem(
+          "posMobileAccessToken",
+        );
+
+        router.replace(
+          "/login",
+        );
+
+        throw new Error(
+          "A sessão expirou durante o pagamento.",
+        );
+      }
+
+      if (
+        !responseInicio.ok ||
+        !resultadoInicio.sucesso ||
+        !resultadoInicio.dados
+      ) {
+        throw new Error(
+          resultadoInicio.mensagem ||
+            "Não foi possível iniciar o pagamento no TPA.",
+        );
+      }
+
+      pedidoId =
+        resultadoInicio.dados.pedidoId
+          ?.trim() ?? "";
+
+      if (!pedidoId) {
+        throw new Error(
+          "O serviço TPA não devolveu o identificador do pedido.",
+        );
+      }
+
+      pagamentoIntegradoPendenteRef.current = {
+        pedidoId,
+        idMovimentoMesa:
+          pedido.idMovimentoMesa,
+        idInternoConta:
+          pedido.idInternoConta,
+        idPagamentoDoc:
+          pedido.idPagamentoDoc,
+      };
+
+      estadoAtual =
+        normalizarEstadoPagamentoIntegrado(
+          resultadoInicio.dados.estado,
+        );
+
+      valorAtual =
+        resultadoInicio.dados.valor > 0
+          ? resultadoInicio.dados.valor
+          : valorPreparado;
+
+      setPagamentoIntegradoVisual({
+        pedidoId,
+        estado:
+          estadoAtual ||
+          "EM_PROCESSAMENTO",
+        mensagem:
+          resultadoInicio.mensagem ||
+          "Aguarde a confirmação no terminal.",
+        valor: valorAtual,
+      });
+
+      if (
+        estadosFalha.has(
+          estadoAtual,
+        )
+      ) {
+        pagamentoIntegradoPendenteRef.current =
+          null;
+
+        throw new Error(
+          resultadoInicio.mensagem ||
+            `O pagamento terminou com o estado ${estadoAtual}.`,
+        );
+      }
+    }
+
+    /*
+      ========================================================================
+      POLLING
+      ========================================================================
+
+      Se houver uma falha transitória de rede depois de o PedidoId existir,
+      não criamos outro pagamento. Continuamos a tentar consultar o mesmo
+      pedido durante a janela normal do TPA.
+      ========================================================================
+    */
+    if (
+      !estadosFinalizaveis.has(
+        estadoAtual,
+      )
+    ) {
+      const limiteConsulta =
+        Date.now() + 130000;
+
+      let ultimaMensagemComunicacao = "";
+
+      while (
+        Date.now() < limiteConsulta
+      ) {
+        await aguardar(2000);
+
+        let responseEstado: Response;
+        let resultadoEstado:
+          | POSMobilePagamentoIntegradoResposta
+          | null = null;
+
+        try {
+          responseEstado =
+            await fetch(
+              "/api/pos-mobile/pagamentos/estado-integrado",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                  Accept:
+                    "application/json",
+                },
+                body:
+                  JSON.stringify({
+                    accessToken:
+                      pedido.accessToken,
+                    pedidoId,
+                  }),
+              },
+            );
+
+          resultadoEstado =
+            (await responseEstado.json()) as
+              POSMobilePagamentoIntegradoResposta;
+        } catch (error) {
+          ultimaMensagemComunicacao =
+            error instanceof Error
+              ? error.message
+              : "Falha de comunicação.";
+
+          setPagamentoIntegradoVisual({
+            pedidoId,
+            estado:
+              estadoAtual ||
+              "EM_PROCESSAMENTO",
+            mensagem:
+              "A recuperar a ligação e a confirmar o estado do pagamento...",
+            valor: valorAtual,
+          });
+
+          continue;
+        }
+
+        if (
+          responseEstado.status === 401
+        ) {
+          sessionStorage.removeItem(
+            "posMobileAccessToken",
+          );
+
+          router.replace(
+            "/login",
+          );
+
+          throw new Error(
+            "A sessão expirou durante a confirmação do pagamento.",
+          );
+        }
+
+        if (
+          !responseEstado.ok ||
+          !resultadoEstado?.sucesso ||
+          !resultadoEstado.dados
+        ) {
+          ultimaMensagemComunicacao =
+            resultadoEstado?.mensagem ||
+            `Não foi possível consultar o TPA. HTTP ${responseEstado.status}.`;
+
+          setPagamentoIntegradoVisual({
+            pedidoId,
+            estado:
+              estadoAtual ||
+              "EM_PROCESSAMENTO",
+            mensagem:
+              "A confirmar o resultado do pagamento no terminal...",
+            valor: valorAtual,
+          });
+
+          continue;
+        }
+
+        ultimaMensagemComunicacao = "";
+
+        estadoAtual =
+          normalizarEstadoPagamentoIntegrado(
+            resultadoEstado.dados.estado,
+          );
+
+        if (
+          resultadoEstado.dados.valor > 0
+        ) {
+          valorAtual =
+            resultadoEstado.dados.valor;
+        }
+
+        setPagamentoIntegradoVisual({
+          pedidoId,
+          estado:
+            estadoAtual ||
+            "EM_PROCESSAMENTO",
+          mensagem:
+            resultadoEstado.mensagem ||
+            "A aguardar confirmação no terminal...",
+          valor: valorAtual,
+        });
+
+        if (
+          estadosFinalizaveis.has(
+            estadoAtual,
+          )
+        ) {
+          break;
+        }
+
+        if (
+          estadosFalha.has(
+            estadoAtual,
+          )
+        ) {
+          pagamentoIntegradoPendenteRef.current =
+            null;
+
+          throw new Error(
+            resultadoEstado.mensagem ||
+              `O pagamento terminou com o estado ${estadoAtual}.`,
+          );
+        }
+      }
+
+      if (
+        !estadosFinalizaveis.has(
+          estadoAtual,
+        )
+      ) {
+        /*
+          Mantemos pagamentoIntegradoPendenteRef.
+
+          Se o operador voltar a confirmar, retomamos este PedidoId em vez de
+          criar uma segunda cobrança potencialmente duplicada.
+        */
+        throw new Error(
+          ultimaMensagemComunicacao
+            ? `Não foi possível confirmar o resultado do pagamento no terminal. ${ultimaMensagemComunicacao} Não repita o pagamento sem voltar a consultar este pedido.`
+            : "Não foi possível confirmar o resultado do pagamento no terminal dentro do tempo esperado. Volte a confirmar para consultar o mesmo pedido; não inicie uma nova cobrança.",
+        );
+      }
+    }
+
+    /*
+      ========================================================================
+      FINALIZAR
+      ========================================================================
+
+      Mesmo depois de APROVADO o browser não grava diretamente a venda.
+      A APIFNT volta a confirmar o PedidoId, o posto, a conta, o botão, o
+      cliente e o valor antes de persistir o documento.
+      ========================================================================
+    */
+    setPagamentoIntegradoVisual({
+      pedidoId,
+      estado:
+        estadoAtual ||
+        "APROVADO",
+      mensagem:
+        "Pagamento confirmado. A emitir o documento de venda...",
+      valor: valorAtual,
+    });
+
+    const {
+      accessToken,
+      ...pagamentoFinal
+    } = pedido;
+
+    let responseFinal: Response;
+
+    try {
+      responseFinal =
+        await fetch(
+          "/api/pos-mobile/pagamentos/finalizar-integrado",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                accessToken,
+                pedidoId,
+                pagamento:
+                  pagamentoFinal,
+              }),
+          },
+        );
+    } catch (error) {
+      /*
+        O PedidoId continua guardado para que uma nova confirmação retome a
+        mesma operação e a finalização seja repetida de forma idempotente.
+      */
+      throw new Error(
+        error instanceof Error
+          ? `O pagamento foi enviado ao TPA, mas não foi possível confirmar a gravação da venda: ${error.message}`
+          : "O pagamento foi enviado ao TPA, mas não foi possível confirmar a gravação da venda.",
+      );
+    }
+
+    const resultadoFinal =
+      (await responseFinal.json()) as
+        POSMobilePagamentoIntegradoResposta;
+
+    if (
+      responseFinal.status === 401
+    ) {
+      sessionStorage.removeItem(
+        "posMobileAccessToken",
+      );
+
+      router.replace(
+        "/login",
+      );
+
+      throw new Error(
+        "A sessão expirou durante a finalização do pagamento.",
+      );
+    }
+
+    if (
+      !responseFinal.ok ||
+      !resultadoFinal.sucesso ||
+      !resultadoFinal.dados
+    ) {
+      /*
+        Não limpamos o PedidoId aqui.
+
+        O TPA pode já ter aprovado. Uma nova confirmação chama novamente a
+        finalização do MESMO pedido, protegida pela idempotência da APIFNT.
+      */
+      throw new Error(
+        resultadoFinal.mensagem ||
+          "Não foi possível finalizar o pagamento integrado.",
+      );
+    }
+
+    pagamentoIntegradoPendenteRef.current =
+      null;
+
+    setPagamentoIntegradoVisual({
+      pedidoId,
+      estado:
+        normalizarEstadoPagamentoIntegrado(
+          resultadoFinal.dados.estado,
+        ) ||
+        "ASSOCIADO_VENDA",
+      mensagem:
+        resultadoFinal.mensagem ||
+        "Pagamento concluído com sucesso.",
+      valor:
+        resultadoFinal.dados.valor,
+    });
+
+    return resultadoFinal.dados;
+  }
+
+
+  function pedirConfirmacaoImpressao():
+    Promise<boolean> {
+    /*
+      Se, por qualquer motivo, já existir uma confirmação aberta,
+      não criamos uma segunda.
+    */
+    if (
+      resolverConfirmacaoImpressaoRef.current !==
+      null
+    ) {
+      console.warn(
+        "Confirmação de impressão ignorada: já existe um modal aberto.",
+      );
+
+      return Promise.resolve(
+        false,
+      );
+    }
+
+    return new Promise<boolean>(
+      (resolve) => {
+        resolverConfirmacaoImpressaoRef.current =
+          resolve;
+
+        setMostrarConfirmacaoImpressao(
+          true,
+        );
+      },
+    );
+  }
+
+
+  function responderConfirmacaoImpressao(
+    imprimir: boolean,
+  ) {
+    const resolver =
+      resolverConfirmacaoImpressaoRef.current;
+
+    if (!resolver) {
+      return;
+    }
+
+    /*
+      Limpamos primeiro para impedir um segundo clique no mesmo botão.
+    */
+    resolverConfirmacaoImpressaoRef.current =
+      null;
+
+    setMostrarConfirmacaoImpressao(
+      false,
+    );
+
+    resolver(
+      imprimir,
+    );
+  }
+
+
   async function confirmarPagamentoPreparado(
     valores: PagamentoConfirmacaoValores,
   ) {
     if (
+      pagamentoEmExecucaoRef.current ||
       aEfetuarPagamento ||
       !dadosPagamentoPreparado ||
       !contextoPagamentoPreparado
@@ -3170,6 +4412,12 @@ console.log(
     } =
       contextoPagamentoPreparado;
 
+    /*
+      Bloqueio síncrono imediato contra duplo clique/toque.
+    */
+    pagamentoEmExecucaoRef.current =
+      true;
+
     setMensagemErroPagamentos(
       "",
     );
@@ -3181,6 +4429,10 @@ console.log(
     setIdPagamentoEmProcessamento(
       pagamento.idInterno,
     );
+
+    let documentoConcluido = "";
+    let valorDocumentoConcluido = 0;
+    let idVndCabDocumentoConcluido = 0;
 
     try {
       /*
@@ -3194,136 +4446,242 @@ console.log(
         por idPagamentoDoc. IDTipoDocVnd e IDModoPagamento
         são novamente resolvidos no servidor.
       */
-      const pedido = {
-        accessToken,
+      const pedido:
+        PagamentoPedidoFuncional = {
+          accessToken,
 
-        idMovimentoMesa,
-        idInternoConta,
+          idMovimentoMesa,
+          idInternoConta,
 
-        idPagamentoDoc:
-          pagamento.idInterno,
+          idPagamentoDoc:
+            pagamento.idInterno,
 
-        cliente: {
-          idEntidade:
-            idCliente,
-        },
-
-        idTipoServico:
-          valores.idTipoServico,
-
-        idTipoRefeicao:
-          valores.idTipoRefeicao,
-
-        idMercado:
-          valores.idMercado,
-
-        /*
-          Num desconto automático o modal devolve 0.
-          A APIFNT volta a resolver o desconto associado
-          ao método de pagamento.
-
-          Num desconto selecionável vem o ID escolhido
-          pelo operador.
-        */
-        idTipoDesconto:
-          valores.idTipoDesconto,
-
-        idMotivoDesconto:
-          valores.idMotivoDesconto,
-
-        justificacaoDesconto:
-          valores.justificacaoDesconto,
-
-        referencia:
-          valores.referencia,
-
-        valorEntregue:
-          valores.valorEntregue,
-      };
-
-      console.group(
-        "========== EFETUAR PAGAMENTO POS MOBILE ==========",
-      );
-
-      console.log(
-        "Pagamento:",
-        pagamento,
-      );
-
-      console.log(
-        "Preparação:",
-        dadosPagamentoPreparado,
-      );
-
-      console.log(
-        "Pedido final:",
-        pedido,
-      );
-
-      const response =
-        await fetch(
-          "/api/pos-mobile/efetuar-pagamento",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Accept:
-                "application/json",
-            },
-            body:
-              JSON.stringify(
-                pedido,
-              ),
+          cliente: {
+            idEntidade:
+              idCliente,
           },
+
+          idTipoServico:
+            valores.idTipoServico,
+
+          idTipoRefeicao:
+            valores.idTipoRefeicao,
+
+          idMercado:
+            valores.idMercado,
+
+          /*
+            Num desconto automático o modal devolve 0.
+            A APIFNT volta a resolver o desconto associado
+            ao método de pagamento.
+
+            Num desconto selecionável vem o ID escolhido
+            pelo operador.
+          */
+          idTipoDesconto:
+            valores.idTipoDesconto,
+
+          idMotivoDesconto:
+            valores.idMotivoDesconto,
+
+          justificacaoDesconto:
+            valores.justificacaoDesconto,
+
+          referencia:
+            valores.referencia,
+
+          valorEntregue:
+            valores.valorEntregue,
+
+          /*
+            REGRA GERAL DO POS MOBILE:
+            a gravação da venda nunca aguarda pela impressora.
+          */
+          imprimir: false,
+        };
+
+      const integracao =
+        obterIntegracaoPagamentoPreparado(
+          dadosPagamentoPreparado,
         );
-
-      const resultado =
-        (await response.json()) as
-          POSMobileEfetuarPagamentoResposta;
-
-      console.log(
-        "HTTP status:",
-        response.status,
-      );
-
-      console.log(
-        "Resposta:",
-        resultado,
-      );
-
-      console.groupEnd();
 
       if (
-        response.status === 401
+        integracao.integracaoPagamento &&
+        integracao.tipoIntegracaoPagamento !==
+          "TPA"
       ) {
-        sessionStorage.removeItem(
-          "posMobileAccessToken",
+        throw new Error(
+          `O tipo de integração de pagamento "${integracao.tipoIntegracaoPagamento || "NÃO DEFINIDO"}" ainda não é suportado pelo POS Mobile.`,
         );
-
-        router.replace(
-          "/login",
-        );
-
-        return;
       }
 
       if (
-        !response.ok ||
-        !resultado.sucesso ||
-        !resultado.dados
+        integracao.integracaoPagamento &&
+        integracao.tipoIntegracaoPagamento ===
+          "TPA"
       ) {
-        throw new Error(
-          resultado.mensagem ||
-            "Não foi possível efetuar o pagamento.",
+        console.group(
+          "========== PAGAMENTO INTEGRADO POS MOBILE ==========" ,
         );
+
+        console.log(
+          "Pagamento:",
+          pagamento,
+        );
+
+        console.log(
+          "Preparação:",
+          dadosPagamentoPreparado,
+        );
+
+        console.log(
+          "Pedido final:",
+          pedido,
+        );
+
+        const resultadoIntegrado =
+          await executarFluxoPagamentoIntegrado(
+            pedido,
+            dadosPagamentoPreparado.valor,
+          );
+
+        console.log(
+          "Pagamento integrado concluído:",
+          resultadoIntegrado,
+        );
+
+        console.groupEnd();
+
+        documentoConcluido =
+          resultadoIntegrado.documento;
+
+        valorDocumentoConcluido =
+          resultadoIntegrado.valor;
+
+        idVndCabDocumentoConcluido =
+          resultadoIntegrado.idVndCabDocumento;
+      } else {
+        /*
+          ====================================================================
+          PAGAMENTO NORMAL
+          ====================================================================
+
+          Este é o fluxo que já existia. Mantém-se exatamente separado do
+          pagamento integrado.
+          ====================================================================
+        */
+        console.group(
+          "========== EFETUAR PAGAMENTO POS MOBILE ==========" ,
+        );
+
+        console.log(
+          "Pagamento:",
+          pagamento,
+        );
+
+        console.log(
+          "Preparação:",
+          dadosPagamentoPreparado,
+        );
+
+        console.log(
+          "Pedido final:",
+          pedido,
+        );
+
+        const response =
+          await fetch(
+            "/api/pos-mobile/efetuar-pagamento",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Accept:
+                  "application/json",
+              },
+              body:
+                JSON.stringify(
+                  pedido,
+                ),
+            },
+          );
+
+        const resultado =
+          (await response.json()) as
+            POSMobileEfetuarPagamentoResposta;
+
+        console.log(
+          "HTTP status:",
+          response.status,
+        );
+
+        console.log(
+          "Resposta:",
+          resultado,
+        );
+
+        console.groupEnd();
+
+        if (
+          response.status === 401
+        ) {
+          sessionStorage.removeItem(
+            "posMobileAccessToken",
+          );
+
+          router.replace(
+            "/login",
+          );
+
+          return;
+        }
+
+        if (
+          !response.ok ||
+          !resultado.sucesso ||
+          !resultado.dados
+        ) {
+          throw new Error(
+            resultado.mensagem ||
+              "Não foi possível efetuar o pagamento.",
+          );
+        }
+
+        documentoConcluido =
+          resultado.dados.documento;
+
+        valorDocumentoConcluido =
+          resultado.dados.valorDocumento;
+
+        idVndCabDocumentoConcluido =
+          resultado.dados.idVndCabDocumento;
       }
 
       /*
-        A partir deste momento a venda já foi gravada.
+        ========================================================================
+        IMPRESSÃO DO TALÃO
+        ========================================================================
 
-        Não devemos repetir a faturação mesmo que a libertação
-        da mesa falhe.
+        A venda JÁ ESTÁ GRAVADA neste ponto.
+
+        Só agora abrimos o Modal HeroUI e aguardamos explicitamente a decisão
+        do operador. O Modal só fecha quando clicar em "Sim" ou "Não".
+
+        pedido.imprimir continua sempre false, portanto a gravação da venda
+        nunca fica dependente da impressora.
+        ========================================================================
+      */
+      /*
+        A venda já foi concluída com sucesso.
+
+        Fechamos AGORA o PagamentoConfirmacaoModal original antes de abrir
+        a pergunta de impressão.
+
+        Sem isto, dadosPagamentoPreparado continuava preenchido e o modal
+        "Confirmar pagamento" permanecia aberto em estado "A processar...",
+        enquanto a função ficava em await à espera de um segundo modal que
+        não ficava acessível ao operador.
       */
       setDadosPagamentoPreparado(
         null,
@@ -3336,6 +4694,107 @@ console.log(
       setMostrarPagamentos(
         false,
       );
+
+      /*
+        No fluxo TPA, pagamentoIntegradoVisual continua preenchido com o
+        estado final (por exemplo ASSOCIADO_VENDA) até ao finally.
+
+        Como vamos ficar em await à espera da resposta do operador no modal
+        de impressão, temos de fechar explicitamente o overlay visual do TPA
+        ANTES de abrir esse modal.
+
+        Caso contrário, o pagamento já está faturado mas o ecrã continua a
+        mostrar "Pagamento TPA / A aguardar pagamento no terminal" por cima
+        da confirmação de impressão.
+      */
+      setPagamentoIntegradoVisual(
+        null,
+      );
+
+      /*
+        Se a configuração mandar perguntar, ficamos à espera do Modal HeroUI
+        e só continuamos depois de o operador clicar em "Sim" ou "Não".
+
+        Se não mandar perguntar, o valor fica True e a impressão separada
+        é solicitada automaticamente.
+      */
+      let desejaImprimir =
+        true;
+
+      if (
+        perguntarAntesDeImprimir
+      ) {
+        desejaImprimir =
+          await pedirConfirmacaoImpressao();
+      }
+
+      if (
+        desejaImprimir
+      ) {
+        console.log(
+          "[PRINT BROWSER 00] OPERADOR/CONFIGURAÇÃO MANDOU IMPRIMIR",
+          {
+            hora:
+              new Date().toISOString(),
+
+            perguntarAntesDeImprimir,
+
+            idVndCabDocumento:
+              idVndCabDocumentoConcluido,
+
+            idPagamentoDoc:
+              pagamento.idInterno,
+          },
+        );
+
+        solicitarImpressaoVenda(
+          accessToken,
+          idVndCabDocumentoConcluido,
+          pagamento.idInterno,
+        );
+      } else {
+        console.log(
+          "[PRINT BROWSER 00] OPERADOR ESCOLHEU NÃO IMPRIMIR",
+          {
+            hora:
+              new Date().toISOString(),
+
+            idVndCabDocumento:
+              idVndCabDocumentoConcluido,
+
+            idPagamentoDoc:
+              pagamento.idInterno,
+          },
+        );
+      }
+
+      /*
+        A partir deste momento a venda já foi gravada.
+
+        Não devemos repetir a faturação mesmo que a libertação
+        da mesa falhe.
+      */
+
+      /*
+        A faturação já foi concluída neste ponto.
+
+        Mostramos imediatamente a mensagem ao operador antes de aguardar
+        qualquer operação auxiliar, nomeadamente a libertação da mesa.
+        A impressão também já foi solicitada acima de forma não bloqueante.
+      */
+      mensagensPOS.pagamentoSucesso({
+        documento:
+          documentoConcluido,
+
+        valor:
+          valorDocumentoConcluido,
+
+        pagamento:
+          pagamento.descricao,
+
+        cliente:
+          descricaoCliente,
+      });
 
       try {
         await sairMesa();
@@ -3357,22 +4816,6 @@ console.log(
         "posMobileContaSelecionada",
       );
 
-      mensagensPOS.pagamentoSucesso({
-        documento:
-          resultado.dados
-            .documento,
-
-        valor:
-          resultado.dados
-            .valorDocumento,
-
-        pagamento:
-          pagamento.descricao,
-
-        cliente:
-          descricaoCliente,
-      });
-
       router.replace(
         "/pos",
       );
@@ -3390,9 +4833,12 @@ console.log(
       /*
         Mantemos o modal aberto.
 
-        Assim o operador pode corrigir Tipo de Serviço,
-        motivo, referência, valor entregue, etc.,
-        sem ter de voltar a escolher o método.
+        Para pagamentos normais o operador pode corrigir Tipo de Serviço,
+        motivo, referência, valor entregue, etc.
+
+        Para TPA, se já existe PedidoId mas houve uma falha transitória de
+        comunicação/finalização, o ref do pedido permanece guardado. Uma nova
+        confirmação retoma o MESMO PedidoId e não inicia uma segunda cobrança.
       */
       setMensagemErroPagamentos(
         mensagem,
@@ -3402,6 +4848,13 @@ console.log(
         mensagem,
       );
     } finally {
+      pagamentoEmExecucaoRef.current =
+        false;
+
+      setPagamentoIntegradoVisual(
+        null,
+      );
+
       setAEfetuarPagamento(
         false,
       );
@@ -6691,9 +8144,10 @@ function alterarQuantidade(
 
       1. Se necessário, abrir/gravar a conta e os produtos novos;
       2. gerar a Consulta de Mesa;
-      3. verificar se existem linhas pendentes para a cozinha;
-      4. se a configuração exigir Segue, abrir o Segue;
-      5. depois do envio concluído (ou se não houver linhas), libertar a mesa.
+      3. solicitar a impressão numa operação independente, sem await;
+      4. verificar se existem linhas pendentes para a cozinha;
+      5. se a configuração exigir Segue, abrir o Segue;
+      6. depois do envio concluído (ou se não houver linhas), libertar a mesa.
 
     A partir do momento em que a APIFNT confirma a Consulta de Mesa,
     nunca repetimos automaticamente a emissão, mesmo que uma fase posterior
@@ -6836,6 +8290,19 @@ identificacao =
 
       setMostrarConfirmacaoConsultaMesa(
         false,
+      );
+
+      /*
+        A Consulta já está persistida.
+
+        A impressão é deliberadamente disparada sem await:
+        o spooler/impressora nunca volta a prender este fluxo.
+      */
+      solicitarImpressaoConsultaMesa(
+        accessToken,
+        identificacao.idMovimentoMesa,
+        identificacao.idInternoConta,
+        resultado.dados.idConsMovimento,
       );
 
       setMensagemOperacao(
@@ -9891,6 +11358,209 @@ identificacao =
           );
         }}
       />
+
+      <Modal>
+        <Modal.Backdrop
+          isOpen={
+            mostrarConfirmacaoImpressao
+          }
+          isDismissable={
+            false
+          }
+          isKeyboardDismissDisabled={
+            true
+          }
+          variant="blur"
+        >
+          <Modal.Container
+            placement="center"
+            size="sm"
+          >
+            <Modal.Dialog
+              aria-labelledby="titulo-confirmacao-impressao"
+              aria-describedby="descricao-confirmacao-impressao"
+            >
+              {/*
+                Não existe Modal.CloseTrigger de propósito.
+                Só os botões Sim/Não podem fechar este modal.
+              */}
+
+              <Modal.Header>
+                <Modal.Heading
+                  id="titulo-confirmacao-impressao"
+                >
+                  Imprimir talão
+                </Modal.Heading>
+              </Modal.Header>
+
+              <Modal.Body>
+                <p
+                  id="descricao-confirmacao-impressao"
+                  className="
+                    text-sm
+                    leading-6
+                    text-slate-600
+                  "
+                >
+                  A venda foi concluída.
+                  Deseja imprimir o talão?
+                </p>
+              </Modal.Body>
+
+              <Modal.Footer>
+                <div
+                  className="
+                    grid
+                    w-full
+                    grid-cols-2
+                    gap-3
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      responderConfirmacaoImpressao(
+                        false,
+                      );
+                    }}
+                    className="
+                      h-12
+                      rounded-xl
+                      border
+                      border-slate-200
+                      bg-white
+                      text-sm
+                      font-black
+                      text-slate-700
+                      shadow-sm
+                      transition
+                      hover:bg-slate-50
+                      active:scale-[0.99]
+                    "
+                  >
+                    Não
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      responderConfirmacaoImpressao(
+                        true,
+                      );
+                    }}
+                    className="
+                      h-12
+                      rounded-xl
+                      bg-emerald-600
+                      text-sm
+                      font-black
+                      text-white
+                      shadow-md
+                      shadow-emerald-600/20
+                      transition
+                      hover:bg-emerald-700
+                      active:scale-[0.99]
+                    "
+                  >
+                    Sim
+                  </button>
+                </div>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      {pagamentoIntegradoVisual &&
+        !mostrarConfirmacaoImpressao && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/20 bg-white p-6 shadow-2xl sm:p-7">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-7 w-7 animate-pulse"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="5"
+                    y="3"
+                    width="14"
+                    height="18"
+                    rx="2"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    d="M8 7h8M8 11h8M9 17h6"
+                  />
+                </svg>
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-600">
+                  Pagamento TPA
+                </p>
+
+                <h2 className="mt-1 text-xl font-black text-slate-950">
+                  A aguardar pagamento no terminal
+                </h2>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
+              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-sky-600" />
+
+              <p className="mt-4 text-3xl font-black tracking-tight text-slate-950">
+                {formatarValor(
+                  pagamentoIntegradoVisual.valor,
+                )}
+              </p>
+
+              <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
+                {pagamentoIntegradoVisual.mensagem}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                  Estado
+                </p>
+
+                <p className="mt-1 truncate font-black text-slate-900">
+                  {pagamentoIntegradoVisual.estado ||
+                    "EM_PROCESSAMENTO"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                  Pedido
+                </p>
+
+                <p
+                  className="mt-1 truncate font-mono text-xs font-bold text-slate-700"
+                  title={
+                    pagamentoIntegradoVisual.pedidoId
+                  }
+                >
+                  {pagamentoIntegradoVisual.pedidoId ||
+                    "A criar..."}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-5 text-center text-xs font-semibold leading-5 text-slate-500">
+              Não feche esta janela nem repita o pagamento.
+              Se houver uma falha de comunicação, o sistema
+              retomará o mesmo pedido TPA.
+            </p>
+          </div>
+        </div>
+      )}
 
       {mostrarConfirmacaoConsultaMesa && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">

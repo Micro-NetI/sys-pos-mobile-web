@@ -724,6 +724,46 @@ export async function POST(
         pedidoNormalizado,
       );
 
+    /*
+      ========================================================================
+      DIAGNÓSTICO TEMPORÁRIO DE CONCORRÊNCIA / MUTEX
+      ========================================================================
+
+      Permite distinguir rapidamente:
+        - SISTEMA_OCUPADO;
+        - MESA_EM_USO;
+        - erros funcionais;
+        - erros da APIFNT.
+
+      Não altera o resultado funcional devolvido ao browser.
+      ========================================================================
+    */
+    console.log(
+      "========== GRAVAR CONTA PRODUTOS - RESPOSTA APIFNT ==========",
+      {
+        sucesso:
+          resultado.sucesso,
+        codigo:
+          resultado.codigo,
+        mensagem:
+          resultado.mensagem,
+        dados:
+          resultado.dados,
+        idPosto:
+          pedidoNormalizado.idPosto,
+        idSala:
+          pedidoNormalizado.idSala,
+        idMesa:
+          pedidoNormalizado.idMesa,
+        idMovimentoMesa:
+          pedidoNormalizado.idMovimentoMesa,
+        idInternoConta:
+          pedidoNormalizado.idInternoConta,
+        numeroProdutos:
+          pedidoNormalizado.produtos.length,
+      },
+    );
+
     const status =
       resultado.sucesso
         ? 200
@@ -735,7 +775,9 @@ export async function POST(
           : resultado.codigo ===
                 "MESA_EM_USO" ||
               resultado.codigo ===
-                "ACESSO_MESA_NEGADO"
+                "ACESSO_MESA_NEGADO" ||
+              resultado.codigo ===
+                "SISTEMA_OCUPADO"
             ? 409
             : 400;
 
