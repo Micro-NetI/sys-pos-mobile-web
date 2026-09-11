@@ -9354,6 +9354,120 @@ identificacao =
     );
   }
 
+  /*
+    ==========================================================================
+    PAGAR DIRETAMENTE A PARTIR DA ABERTURA DA MESA
+    ==========================================================================
+
+    Permite ao operador lançar os produtos e seguir diretamente para o
+    pagamento sem ter de:
+
+      1. abrir/gravar a mesa;
+      2. regressar/entrar novamente na conta;
+      3. só depois abrir os pagamentos.
+
+    Tecnicamente continuamos a respeitar a regra do Motor: o pagamento só
+    começa depois de existir uma conta persistida.
+
+    Por isso, quando estamos em ABERTURA:
+      - gravamos primeiro a mesa e os produtos com finalizarFluxo = false;
+      - NÃO abrimos o Segue nem saímos do editor;
+      - a conta fica carregada em modo CONTA;
+      - abrimos de seguida o mesmo PagamentoDrawer já usado pelas contas.
+
+    Se por algum motivo esta função for chamada já em CONTA, reutilizamos o
+    fluxo normal de abrirPagamentos sem alterar o comportamento existente.
+    ==========================================================================
+  */
+  async function pagarPedidoAntesDeAbrir() {
+    if (
+      aEnviar ||
+      aSairMesa ||
+      aAdicionarPrograma ||
+      aCarregarPagamentos ||
+      aPrepararPagamento ||
+      aEfetuarPagamento
+    ) {
+      return;
+    }
+
+    setMensagemOperacao("");
+    setMensagemErroOperacao("");
+    setMensagemErroPagamentos("");
+    setPesquisaPagamento("");
+
+    if (linhasEditor.length === 0) {
+      setMensagemErroOperacao(
+        "Adicione pelo menos um produto antes de pagar.",
+      );
+      return;
+    }
+
+    if (totalEditor <= 0) {
+      setMensagemErroOperacao(
+        "O total do pedido tem de ser superior a zero para efetuar o pagamento.",
+      );
+      return;
+    }
+
+    if (temPrecosPendentes) {
+      setMensagemErroOperacao(
+        "Existem produtos sem preço válido. Resolva os preços antes de pagar.",
+      );
+      return;
+    }
+
+    /*
+      Numa conta já persistida mantemos exatamente o comportamento anterior.
+    */
+    if (modoEditor === "CONTA") {
+      setMostrarPedidoMobile(false);
+      await abrirPagamentos();
+      return;
+    }
+
+    /*
+      Em ABERTURA, gravamos primeiro sem concluir o fluxo operacional.
+
+      Isto evita:
+        - abrir o Segue;
+        - libertar a mesa;
+        - navegar para /pos.
+
+      O resultado devolve a identificação persistida e
+      recarregarContaMantendoProdutosNovos atualiza contaCarregada/linhasEditor.
+    */
+    const identificacao =
+      await gravarProdutosPendentes(
+        false,
+      );
+
+    if (!identificacao) {
+      return;
+    }
+
+    /*
+      Fechamos apenas o bottom sheet do pedido no telemóvel.
+      No desktop este estado já está normalmente a false e não tem efeito.
+    */
+    setMostrarPedidoMobile(false);
+
+    /*
+      Não chamamos abrirPagamentos() aqui porque, dentro deste mesmo handler,
+      modoEditor/contaCarregada ainda podem refletir o render anterior.
+
+      A conta já foi confirmada pela API e recarregada. Abrimos diretamente o
+      drawer; quando o operador escolher um método, o render seguinte já terá
+      a conta persistida em estado e obterIdentificacaoContaAtual() trabalhará
+      sobre os IDs corretos.
+    */
+    setMostrarPagamentos(true);
+
+    if (pagamentos.length === 0) {
+      await carregarPagamentos();
+    }
+  }
+
   async function concluirSaidaEditor() {
     const mesaLibertada =
       await sairMesa();
@@ -10619,6 +10733,75 @@ identificacao =
                   </button>
                 </div>
 
+                {modoEditor === "ABERTURA" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void pagarPedidoAntesDeAbrir()
+                    }
+                    disabled={
+                      aEnviar ||
+                      aSairMesa ||
+                      aAdicionarPrograma ||
+                      aCarregarPagamentos ||
+                      aPrepararPagamento ||
+                      aEfetuarPagamento ||
+                      linhasEditor.length === 0 ||
+                      totalEditor <= 0 ||
+                      totalProdutosNovos === 0 ||
+                      temPrecosPendentes
+                    }
+                    title="Abrir a mesa, gravar o pedido e seguir diretamente para o pagamento."
+                    className="group mt-3 flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-emerald-600 bg-emerald-600 px-4 py-3 text-white shadow-md shadow-emerald-600/15 transition hover:border-emerald-700 hover:bg-emerald-700 hover:shadow-lg active:scale-[0.99] disabled:cursor-not-allowed disabled:border-emerald-200 disabled:bg-emerald-200 disabled:text-white/80 disabled:shadow-none"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-inset ring-white/20">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          className="h-5 w-5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden="true"
+                        >
+                          <rect
+                            x="3"
+                            y="5"
+                            width="18"
+                            height="14"
+                            rx="2"
+                          />
+
+                          <path
+                            strokeLinecap="round"
+                            d="M3 10h18M7 15h3"
+                          />
+                        </svg>
+                      </span>
+
+                      <span className="min-w-0 text-left">
+                        <span className="block text-sm font-black">
+                          {aEnviar
+                            ? "A abrir mesa..."
+                            : aCarregarPagamentos
+                              ? "A carregar pagamentos..."
+                              : "Pagar agora"}
+                        </span>
+
+                        <span className="mt-0.5 block text-[11px] font-semibold text-emerald-50/90">
+                          Abre a mesa e segue diretamente para pagamentos
+                        </span>
+                      </span>
+                    </span>
+
+                    <strong className="shrink-0 text-lg font-black">
+                      {formatarValor(
+                        totalEditor,
+                      )}
+                    </strong>
+                  </button>
+                )}
+
                 {/* ============================================================
                     PAGAMENTO
                     ============================================================ */}
@@ -11112,52 +11295,129 @@ identificacao =
               </div>
 
               {totalProdutosNovos > 0 ? (
-                <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
-                  <button
-                    type="button"
-                    onClick={
-                      limparProdutosNovos
-                    }
-                    disabled={
-                      totalProdutosNovos ===
-                      0
-                    }
-                    className="h-12 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 transition disabled:opacity-40"
-                  >
-                    {modoEditor === "CONTA"
-                      ? "Limpar novos"
-                      : "Limpar"}
-                  </button>
+                modoEditor === "ABERTURA" ? (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void pagarPedidoAntesDeAbrir()
+                      }
+                      disabled={
+                        aEnviar ||
+                        aSairMesa ||
+                        aAdicionarPrograma ||
+                        aCarregarPagamentos ||
+                        aPrepararPagamento ||
+                        aEfetuarPagamento ||
+                        linhasEditor.length === 0 ||
+                        totalEditor <= 0 ||
+                        totalProdutosNovos === 0 ||
+                        temPrecosPendentes
+                      }
+                      className="flex h-14 w-full items-center justify-between rounded-2xl bg-emerald-600 px-4 text-white shadow-md shadow-emerald-600/20 transition active:scale-[0.99] disabled:bg-emerald-200"
+                    >
+                      <span className="text-left">
+                        <span className="block text-sm font-black">
+                          {aEnviar
+                            ? "A abrir mesa..."
+                            : aCarregarPagamentos
+                              ? "A carregar pagamentos..."
+                              : "Pagar agora"}
+                        </span>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMostrarPedidoMobile(
-                        false,
-                      );
+                        <span className="mt-0.5 block text-[10px] font-semibold text-emerald-50/90">
+                          Abre a mesa e segue para pagamentos
+                        </span>
+                      </span>
 
-                      void enviarProdutosNovos();
-                    }}
-                    disabled={
-                      aEnviar ||
-                      aAdicionarPrograma ||
-                      linhasEditor.length ===
-                        0 ||
-                      totalProdutosNovos ===
-                        0 ||
-                      temPrecosPendentes
-                    }
-                    className="h-12 rounded-xl bg-blue-600 px-4 text-sm font-black text-white shadow-md shadow-blue-600/20 transition disabled:bg-blue-300"
-                  >
-                    {aEnviar
-                      ? modoEditor === "CONTA"
+                      <strong className="shrink-0 text-lg font-black">
+                        {formatarValor(
+                          totalEditor,
+                        )}
+                      </strong>
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={
+                          limparProdutosNovos
+                        }
+                        disabled={
+                          totalProdutosNovos === 0 ||
+                          aEnviar
+                        }
+                        className="h-11 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 transition disabled:opacity-40"
+                      >
+                        Limpar pedido
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMostrarPedidoMobile(
+                            false,
+                          );
+
+                          void enviarProdutosNovos();
+                        }}
+                        disabled={
+                          aEnviar ||
+                          aAdicionarPrograma ||
+                          linhasEditor.length === 0 ||
+                          totalProdutosNovos === 0 ||
+                          temPrecosPendentes
+                        }
+                        className="h-11 rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-black text-blue-700 transition disabled:opacity-40"
+                      >
+                        {aEnviar
+                          ? "A abrir..."
+                          : "Abrir mesa"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
+                    <button
+                      type="button"
+                      onClick={
+                        limparProdutosNovos
+                      }
+                      disabled={
+                        totalProdutosNovos ===
+                        0
+                      }
+                      className="h-12 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 transition disabled:opacity-40"
+                    >
+                      Limpar novos
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMostrarPedidoMobile(
+                          false,
+                        );
+
+                        void enviarProdutosNovos();
+                      }}
+                      disabled={
+                        aEnviar ||
+                        aAdicionarPrograma ||
+                        linhasEditor.length ===
+                          0 ||
+                        totalProdutosNovos ===
+                          0 ||
+                        temPrecosPendentes
+                      }
+                      className="h-12 rounded-xl bg-blue-600 px-4 text-sm font-black text-white shadow-md shadow-blue-600/20 transition disabled:bg-blue-300"
+                    >
+                      {aEnviar
                         ? "A enviar..."
-                        : "A abrir..."
-                      : modoEditor === "CONTA"
-                        ? "Enviar novos"
-                        : "Abrir mesa"}
-                  </button>
-                </div>
+                        : "Enviar novos"}
+                    </button>
+                  </div>
+                )
               ) : modoEditor === "CONTA" ? (
                 <div className="grid grid-cols-2 gap-2">
                   <button
