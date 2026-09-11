@@ -34,6 +34,9 @@ import CatalogoGrupoLink from "@/app/components/pos/CatalogoGrupoLink";
 import PagamentoConfirmacaoModal, {
   type PagamentoConfirmacaoValores,
 } from "@/app/components/pos/pagamentos/PagamentoConfirmacaoModal";
+import ReciboTPAPreviewModal, {
+  type ReciboTPADados,
+} from "@/app/components/pos/ReciboTPAPreviewModal";
 import {
   usePOSContexto,
 } from "@/app/pos/POSContextoContext";
@@ -301,6 +304,26 @@ interface POSMobilePagamentoIntegradoResposta {
   mensagem: string;
   versaoContrato: string;
   dados: POSMobilePagamentoIntegradoDados | null;
+}
+
+/*
+  ============================================================================
+  PREVIEW DE IMPRESSÃO TPA - TESTE
+  ============================================================================
+
+  Contrato temporário da rota:
+    POST /api/pos-mobile/preparar-impressao-venda-tpa-teste
+
+  O conteúdo de dados é produzido pelo MotorFnt e apresentado pelo
+  ReciboTPAPreviewModal.
+  ============================================================================
+*/
+interface POSMobilePrepararImpressaoTPATesteResposta {
+  sucesso: boolean;
+  codigo: string;
+  mensagem: string;
+  versaoContrato: string;
+  dados: ReciboTPADados | null;
 }
 
 interface PagamentoIntegradoVisual {
@@ -1865,6 +1888,36 @@ console.log(
       ((imprimir: boolean) => void) |
       null
     >(null);
+
+  /*
+    =========================================================================
+    PREVIEW TPA - TESTE
+    =========================================================================
+
+    Quando o operador responde "Não" à impressão física, pedimos à APIFNT
+    o JSON preparado para o TPA e apresentamo-lo como talão de 58 mm.
+
+    O fluxo do pagamento fica à espera de o operador fechar o preview.
+    Depois continua exatamente como antes: sucesso, libertação da mesa,
+    limpeza da sessão da mesa e navegação para /pos.
+    =========================================================================
+  */
+  const [
+    reciboTPA,
+    setReciboTPA,
+  ] = useState<ReciboTPADados | null>(
+    null,
+  );
+
+  const [
+    mostrarPreviewTPA,
+    setMostrarPreviewTPA,
+  ] = useState(false);
+
+  const resolverPreviewTPARef =
+    useRef<(() => void) | null>(
+      null,
+    );
 
   /*
     Novo fluxo de pagamento:
@@ -4390,6 +4443,173 @@ console.log(
   }
 
 
+  async function abrirPreviewImpressaoTPA(
+    accessToken: string,
+    idVndCabDocumento: number,
+  ): Promise<void> {
+    const token =
+      accessToken.trim();
+
+    if (
+      token === "" ||
+      !Number.isInteger(
+        idVndCabDocumento,
+      ) ||
+      idVndCabDocumento <= 0
+    ) {
+      console.error(
+        "[PREVIEW TPA] Dados inválidos.",
+        {
+          idVndCabDocumento,
+        },
+      );
+
+      mensagensPOS.erro({
+        titulo:
+          "Não foi possível preparar o talão",
+        descricao:
+          "Os dados necessários para o preview TPA são inválidos.",
+      });
+
+      return;
+    }
+
+    if (
+      resolverPreviewTPARef.current !==
+        null ||
+      mostrarPreviewTPA
+    ) {
+      console.warn(
+        "[PREVIEW TPA] Já existe um preview aberto.",
+      );
+
+      return;
+    }
+
+    try {
+      console.log(
+        "[PREVIEW TPA 01] A preparar dados",
+        {
+          idVndCabDocumento,
+        },
+      );
+
+      const response =
+        await fetch(
+          "/api/pos-mobile/preparar-impressao-venda-tpa-teste",
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Accept:
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                accessToken:
+                  token,
+
+                idVndCabDocumento,
+              }),
+
+            cache:
+              "no-store",
+          },
+        );
+
+      const resultado =
+        (await response.json()) as
+          POSMobilePrepararImpressaoTPATesteResposta;
+
+      console.log(
+        "[PREVIEW TPA 02] Resposta",
+        {
+          status:
+            response.status,
+
+          resultado,
+        },
+      );
+
+      if (
+        !response.ok ||
+        !resultado.sucesso ||
+        !resultado.dados
+      ) {
+        mensagensPOS.erro({
+          titulo:
+            "Não foi possível preparar o talão",
+          descricao:
+            resultado.mensagem ||
+            "A APIFNT não devolveu os dados do preview TPA.",
+        });
+
+        return;
+      }
+
+      setReciboTPA(
+        resultado.dados,
+      );
+
+      /*
+        Tal como na confirmação Sim/Não, esperamos explicitamente pelo fecho
+        do preview para impedir que router.replace('/pos') desmonte a página
+        antes de o operador conseguir analisar o talão.
+      */
+      await new Promise<void>(
+        (resolve) => {
+          resolverPreviewTPARef.current =
+            resolve;
+
+          setMostrarPreviewTPA(
+            true,
+          );
+        },
+      );
+    } catch (error) {
+      console.error(
+        "[PREVIEW TPA ERRO] Falha ao preparar o preview.",
+        error,
+      );
+
+      mensagensPOS.erro({
+        titulo:
+          "Não foi possível preparar o talão",
+        descricao:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível comunicar com a rota de preview TPA.",
+      });
+    }
+  }
+
+
+  function fecharPreviewImpressaoTPA() {
+    const resolver =
+      resolverPreviewTPARef.current;
+
+    resolverPreviewTPARef.current =
+      null;
+
+    setMostrarPreviewTPA(
+      false,
+    );
+
+    setReciboTPA(
+      null,
+    );
+
+    if (resolver) {
+      resolver();
+    }
+  }
+
+
   async function confirmarPagamentoPreparado(
     valores: PagamentoConfirmacaoValores,
   ) {
@@ -4765,6 +4985,20 @@ console.log(
             idPagamentoDoc:
               pagamento.idInterno,
           },
+        );
+
+        /*
+          TESTE DO NOVO CONTRATO TPA:
+
+          em vez de imprimir fisicamente, pedimos o JSON preparado pela
+          nova função e mostramos o talão de 58 mm no Next.
+
+          A venda já está faturada; esta operação nunca volta a cobrar nem
+          a criar o documento.
+        */
+        await abrirPreviewImpressaoTPA(
+          accessToken,
+          idVndCabDocumentoConcluido,
         );
       }
 
@@ -11731,8 +11965,21 @@ identificacao =
         </Modal.Backdrop>
       </Modal>
 
+      <ReciboTPAPreviewModal
+        aberto={
+          mostrarPreviewTPA
+        }
+        dados={
+          reciboTPA
+        }
+        onFechar={
+          fecharPreviewImpressaoTPA
+        }
+      />
+
       {pagamentoIntegradoVisual &&
-        !mostrarConfirmacaoImpressao && (
+        !mostrarConfirmacaoImpressao &&
+        !mostrarPreviewTPA && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-white/20 bg-white p-6 shadow-2xl sm:p-7">
             <div className="flex items-center gap-4">
