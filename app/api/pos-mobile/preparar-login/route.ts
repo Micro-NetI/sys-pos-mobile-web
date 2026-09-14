@@ -1,4 +1,4 @@
-// app/api/pos-mobile/login/route.ts
+// app/api/pos-mobile/preparar-login/route.ts
 
 import {
   NextRequest,
@@ -10,25 +10,14 @@ import {
 } from "@/lib/pos-mobile-api";
 
 import type {
-  LoginDados,
-  LoginRequest,
+  PrepararLoginDados,
+  PrepararLoginRequest,
 } from "@/types/autenticacao";
 
 
-interface LoginDispositivoPedido {
-  identificador?: string | null;
-  nome?: string | null;
-}
-
-
-interface LoginPedidoRecebido {
-  idPosto?: number;
-
+interface PrepararLoginPedidoRecebido {
   login?: string | null;
   password?: string | null;
-
-  dispositivo?:
-    LoginDispositivoPedido | null;
 }
 
 
@@ -47,23 +36,11 @@ function respostaErro(
     },
     {
       status,
-
       headers: {
         "Cache-Control":
           "no-store, no-cache, must-revalidate",
       },
     },
-  );
-}
-
-
-function numeroInteiroPositivo(
-  valor: unknown,
-): valor is number {
-  return (
-    typeof valor === "number" &&
-    Number.isInteger(valor) &&
-    valor > 0
   );
 }
 
@@ -81,12 +58,12 @@ export async function POST(
   request: NextRequest,
 ) {
   let pedidoRecebido:
-    LoginPedidoRecebido;
+    PrepararLoginPedidoRecebido;
 
   try {
     pedidoRecebido =
       (await request.json()) as
-        LoginPedidoRecebido;
+        PrepararLoginPedidoRecebido;
   } catch {
     return respostaErro(
       400,
@@ -98,8 +75,7 @@ export async function POST(
 
   if (
     !pedidoRecebido ||
-    typeof pedidoRecebido !==
-      "object"
+    typeof pedidoRecebido !== "object"
   ) {
     return respostaErro(
       400,
@@ -107,33 +83,6 @@ export async function POST(
       "Os dados de autenticação não foram enviados.",
     );
   }
-
-
-  /*
-    O posto é obrigatório.
-
-    Já não existe fallback para
-    POS_MOBILE_POSTO_ID.
-
-    O idPosto deve resultar da seleção de um
-    dos postos devolvidos anteriormente por
-    PrepararLoginOperador.
-  */
-  if (
-    !numeroInteiroPositivo(
-      pedidoRecebido.idPosto,
-    )
-  ) {
-    return respostaErro(
-      400,
-      "POSTO_INVALIDO",
-      "Selecione um posto válido para iniciar a sessão.",
-    );
-  }
-
-
-  const idPosto =
-    pedidoRecebido.idPosto;
 
 
   const login =
@@ -149,12 +98,6 @@ export async function POST(
       : "";
 
 
-  /*
-    A APIFNT permite login vazio quando o PIN
-    identifica univocamente o operador.
-
-    Por isso apenas o PIN é obrigatório.
-  */
   if (password.trim() === "") {
     return respostaErro(
       400,
@@ -164,66 +107,24 @@ export async function POST(
   }
 
 
-  const identificadorDispositivo =
-    normalizarTexto(
-      pedidoRecebido
-        .dispositivo
-        ?.identificador,
-    ) ||
-    "sys-pos-mobile-web";
-
-
-  const nomeDispositivo =
-    normalizarTexto(
-      pedidoRecebido
-        .dispositivo
-        ?.nome,
-    ) ||
-    "SysPOS Mobile Web";
-
-
   const pedidoApi:
-    LoginRequest = {
-      idPosto,
-
+    PrepararLoginRequest = {
       login,
-
       password,
-
-      dispositivo: {
-        identificador:
-          identificadorDispositivo,
-
-        nome:
-          nomeDispositivo,
-      },
     };
 
 
   try {
-    /*
-      A APIFNT volta a:
-
-        - validar as credenciais;
-        - identificar o utilizador;
-        - validar Tab_PostoUtil;
-        - validar o posto;
-        - criar POSMobileSessao.
-
-      Nunca confiamos apenas na seleção feita
-      anteriormente pelo frontend.
-    */
     const resultado =
       await callPosMobileApi<
-        LoginDados
+        PrepararLoginDados
       >(
-        "LoginOperador",
+        "PrepararLoginOperador",
         pedidoApi,
       );
 
 
     let status = 400;
-
 
     if (resultado.sucesso) {
       status = 200;
@@ -234,16 +135,13 @@ export async function POST(
           status = 401;
           break;
 
-
-        case "POSTO_NAO_AUTORIZADO":
+        case "POSTOS_UTILIZADOR_NAO_ENCONTRADOS":
           status = 403;
           break;
-
 
         case "LOGIN_EM_PROCESSAMENTO":
           status = 409;
           break;
-
 
         default:
           status = 400;
@@ -256,7 +154,6 @@ export async function POST(
       resultado,
       {
         status,
-
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
@@ -265,14 +162,13 @@ export async function POST(
     );
   } catch (error) {
     console.error(
-      "Erro ao efetuar login no POS Mobile:",
+      "Erro ao preparar login no POS Mobile:",
       error,
     );
 
-
     return respostaErro(
       502,
-      "ERRO_LOGIN",
+      "ERRO_PREPARAR_LOGIN",
       "Não foi possível comunicar com a API POS Mobile.",
     );
   }

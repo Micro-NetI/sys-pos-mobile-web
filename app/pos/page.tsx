@@ -40,7 +40,6 @@ import type {
 
 import type {
   POSMobilePostoDisponivel,
-  POSMobilePostosDisponiveisResposta,
 } from "@/types/postos";
 
 interface POSMobileContextoResponse {
@@ -613,79 +612,111 @@ function PosPageConteudo() {
   }, [idPaginaSelecionada]);
 
   useEffect(() => {
-    let componenteAtivo = true;
+    /*
+      A lista de postos já foi devolvida pela APIFNT
+      depois da autenticação do operador.
 
-    async function carregarPostosDisponiveis() {
-      try {
-        const response =
-          await fetch(
-            "/api/pos-mobile/postos",
-            {
-              method: "GET",
-              headers: {
-                Accept:
-                  "application/json",
-              },
-              cache: "no-store",
-            },
-          );
+      Não voltamos a chamar /api/pos-mobile/postos,
+      porque essa rota deixa de expor a lista global
+      de postos antes da autenticação.
+    */
+    const postosGuardados =
+      sessionStorage.getItem(
+        "posMobilePostosAutorizados",
+      );
 
-        const resultado =
-          (await response.json()) as
-            POSMobilePostosDisponiveisResposta;
+    if (!postosGuardados) {
+      /*
+        Pode acontecer temporariamente numa sessão antiga,
+        criada antes desta alteração.
 
-        if (
-          !response.ok ||
-          !resultado.sucesso ||
-          !resultado.dados
-        ) {
-          throw new Error(
-            resultado.mensagem ||
-              "Não foi possível carregar os postos disponíveis.",
-          );
-        }
+        Não impedimos o funcionamento do posto atual.
+        Apenas não disponibilizamos troca de posto.
+      */
+      setPostosDisponiveis(
+        [],
+      );
 
-        const postos =
-          resultado.dados.postos
-            .filter(
-              (posto) =>
-                Number.isInteger(
-                  posto.idPosto,
-                ) &&
-                posto.idPosto > 0,
-            )
-            .sort(
-              (primeiro, segundo) =>
-                primeiro.nomeExibicao.localeCompare(
-                  segundo.nomeExibicao,
-                  "pt-PT",
-                ),
-            );
-
-        if (componenteAtivo) {
-          setPostosDisponiveis(
-            postos,
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Erro ao carregar postos para seleção:",
-          error,
-        );
-
-        if (componenteAtivo) {
-          setPostosDisponiveis(
-            [],
-          );
-        }
-      }
+      return;
     }
 
-    void carregarPostosDisponiveis();
+    try {
+      const valor =
+        JSON.parse(
+          postosGuardados,
+        ) as unknown;
 
-    return () => {
-      componenteAtivo = false;
-    };
+      if (!Array.isArray(valor)) {
+        throw new Error(
+          "Lista de postos inválida.",
+        );
+      }
+
+      const postos =
+        valor
+          .filter(
+            (
+              posto,
+            ): posto is POSMobilePostoDisponivel => {
+              if (
+                !posto ||
+                typeof posto !==
+                  "object"
+              ) {
+                return false;
+              }
+
+              const candidato =
+                posto as
+                  Partial<POSMobilePostoDisponivel>;
+
+              return (
+                Number.isInteger(
+                  candidato.idPosto,
+                ) &&
+                Number(
+                  candidato.idPosto,
+                ) > 0 &&
+                typeof candidato.nomeExibicao ===
+                  "string"
+              );
+            },
+          )
+          .sort(
+            (
+              primeiro,
+              segundo,
+            ) =>
+              primeiro.nomeExibicao.localeCompare(
+                segundo.nomeExibicao,
+                "pt-PT",
+              ),
+          );
+
+      setPostosDisponiveis(
+        postos,
+      );
+    } catch (error) {
+      console.error(
+        "Erro ao recuperar os postos autorizados da sessão:",
+        error,
+      );
+
+      /*
+        Se os dados locais estiverem corrompidos,
+        removemos apenas esta chave.
+
+        Não fazemos sessionStorage.clear(),
+        porque isso eliminaria a sessão POS inteira.
+      */
+      sessionStorage.removeItem(
+        "posMobilePostosAutorizados",
+      );
+
+      setPostosDisponiveis(
+        [],
+      );
+    }
   }, []);
 
   const salaSelecionada =
