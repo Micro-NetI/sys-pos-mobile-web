@@ -22,6 +22,38 @@ export interface POSMobileGrupoLinkBotao {
 
   preco: number;
 
+  /*
+    Configuração do produto associado correspondente
+    ao produto + tabela de preços efetiva.
+
+    modoLancamento:
+      1 = manual
+      2 = automático
+      3 = pergunta ao operador
+
+    preco:
+      preço do produto associado na mesma tabela de preços
+      efetiva utilizada para o produto principal.
+
+    precoEncontrado:
+      indica se foi encontrado preço para o associado
+      nessa tabela efetiva.
+
+    Quando não existe configuração ativa:
+      produtoAssociado = null
+  */
+  produtoAssociado: {
+    idProduto: number;
+
+    descricao: string;
+
+    modoLancamento: number;
+
+    preco: number;
+
+    precoEncontrado: boolean;
+  } | null;
+
   cor: string;
   corLetra: string;
 

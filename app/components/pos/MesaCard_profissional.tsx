@@ -36,13 +36,6 @@ interface MesaCardProps {
   ) => void;
 }
 
-interface ClassesEstadoMesa {
-  cartao: string;
-  faixa: string;
-  badge: string;
-  textoPosto: string;
-}
-
 function obterTextoEstado(
   estado: EstadoVisualMesa,
 ): string {
@@ -66,7 +59,11 @@ function obterTextoEstado(
 
 function obterClassesEstado(
   estado: EstadoVisualMesa,
-): ClassesEstadoMesa {
+): {
+  cartao: string;
+  faixa: string;
+  textoEstado: string;
+} {
   switch (estado) {
     case "OCUPADA":
       return {
@@ -74,10 +71,8 @@ function obterClassesEstado(
           "border-rose-200 bg-white hover:border-rose-300",
         faixa:
           "bg-rose-500",
-        badge:
-          "bg-rose-100 text-rose-700 ring-rose-200",
-        textoPosto:
-          "text-rose-700",
+        textoEstado:
+          "text-rose-600",
       };
 
     case "EM_USO":
@@ -86,10 +81,8 @@ function obterClassesEstado(
           "border-blue-200 bg-white hover:border-blue-300",
         faixa:
           "bg-blue-500",
-        badge:
-          "bg-blue-100 text-blue-700 ring-blue-200",
-        textoPosto:
-          "text-blue-700",
+        textoEstado:
+          "text-blue-600",
       };
 
     case "RESERVADA":
@@ -98,10 +91,8 @@ function obterClassesEstado(
           "border-amber-200 bg-white hover:border-amber-300",
         faixa:
           "bg-amber-500",
-        badge:
-          "bg-amber-100 text-amber-700 ring-amber-200",
-        textoPosto:
-          "text-amber-700",
+        textoEstado:
+          "text-amber-600",
       };
 
     case "BLOQUEADA":
@@ -110,9 +101,7 @@ function obterClassesEstado(
           "border-slate-300 bg-slate-50 text-slate-500",
         faixa:
           "bg-slate-500",
-        badge:
-          "bg-slate-200 text-slate-700 ring-slate-300",
-        textoPosto:
+        textoEstado:
           "text-slate-600",
       };
 
@@ -122,10 +111,8 @@ function obterClassesEstado(
           "border-emerald-200 bg-white hover:border-emerald-300",
         faixa:
           "bg-emerald-500",
-        badge:
-          "bg-emerald-100 text-emerald-700 ring-emerald-200",
-        textoPosto:
-          "text-emerald-700",
+        textoEstado:
+          "text-emerald-600",
       };
   }
 }
@@ -140,26 +127,6 @@ function formatarValor(
       currency: "EUR",
     },
   ).format(valor);
-}
-
-function obterTextoPessoas(
-  quantidade: number,
-): string {
-  return `${quantidade} ${
-    quantidade === 1
-      ? "pessoa"
-      : "pessoas"
-  }`;
-}
-
-function obterTextoContas(
-  quantidade: number,
-): string {
-  return `${quantidade} ${
-    quantidade === 1
-      ? "conta"
-      : "contas"
-  }`;
 }
 
 export default function MesaCard({
@@ -177,37 +144,41 @@ export default function MesaCard({
     mesa.descricao?.trim() ||
     `Mesa ${mesa.numeroMesa}`;
 
-  const postoEmUso =
-    mesa.estado.postoEmUso?.trim() ||
-    "";
+  const textoPessoas =
+    mesa.estado.numeroPessoas === 1
+      ? "1 pessoa"
+      : `${mesa.estado.numeroPessoas} pessoas`;
 
-  const temConsumo =
-    mesa.estado.ocupada;
+  const textoContas =
+    mesa.estado.numeroContas === 1
+      ? "1 conta"
+      : `${mesa.estado.numeroContas} contas`;
+
+  const temResumoConsumo =
+    mesa.estado.ocupada ||
+    mesa.estado.valorAtual > 0 ||
+    mesa.estado.numeroPessoas > 0 ||
+    mesa.estado.numeroContas > 0;
 
   return (
     <button
       type="button"
-      disabled={
-        desativada
-      }
+      disabled={desativada}
       onClick={() =>
-        onSelecionar(
-          mesa,
-        )
+        onSelecionar(mesa)
       }
-      aria-pressed={
-        selecionada
-      }
+      aria-pressed={selecionada}
       aria-label={`${descricao}, ${obterTextoEstado(
         mesa.estadoVisual,
       )}`}
       className={[
-        "group relative flex h-[170px] w-full flex-col overflow-hidden rounded-2xl border p-4 pl-5 text-left shadow-sm transition",
+        "group relative flex h-[118px] w-full flex-col overflow-hidden rounded-2xl border px-3.5 py-3 text-left shadow-sm transition",
+        "sm:h-[126px] sm:px-4 sm:py-3.5",
         "hover:-translate-y-0.5 hover:shadow-md",
         "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200",
         classes.cartao,
         selecionada
-          ? "ring-2 ring-blue-500 ring-offset-2"
+          ? "ring-2 ring-blue-500 ring-offset-1"
           : "",
         desativada
           ? "cursor-wait opacity-65"
@@ -217,91 +188,74 @@ export default function MesaCard({
       <span
         aria-hidden="true"
         className={[
-          "absolute inset-y-0 left-0 w-1.5",
+          "absolute inset-y-0 left-0 w-1",
           classes.faixa,
         ].join(" ")}
       />
 
-      <div className="flex shrink-0 items-start justify-between gap-3">
+      <div className="flex shrink-0 items-start justify-between gap-2 pl-1">
         <div className="min-w-0 flex-1">
           <h3
-            title={
-              descricao
-            }
-            className="truncate pt-0.5 text-lg font-black tracking-tight text-slate-950"
+            title={descricao}
+            className="truncate text-base font-black leading-tight tracking-tight text-slate-950 sm:text-lg"
           >
             {descricao}
           </h3>
 
-          <div className="mt-2 flex min-w-0 items-center gap-2">
-            <span
-              className={[
-                "inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset",
-                classes.badge,
-              ].join(" ")}
-            >
-              {obterTextoEstado(
-                mesa.estadoVisual,
-              )}
-            </span>
-
-            {mesa.estado.emUso &&
-              postoEmUso && (
-                <span
-                  title={`Em utilização por ${postoEmUso}`}
-                  className={[
-                    "min-w-0 truncate text-[10px] font-black uppercase tracking-wide",
-                    classes.textoPosto,
-                  ].join(" ")}
-                >
-                  {postoEmUso}
-                </span>
-              )}
-          </div>
+          <span
+            className={[
+              "mt-1 block text-[11px] font-bold leading-none sm:text-xs",
+              classes.textoEstado,
+            ].join(" ")}
+          >
+            {obterTextoEstado(
+              mesa.estadoVisual,
+            )}
+          </span>
         </div>
 
         <IconeEstadoMesa
-          estado={
-            mesa.estadoVisual
-          }
-          className="shrink-0 transition group-hover:scale-105"
+          estado={mesa.estadoVisual}
+          className="h-8 w-8 shrink-0 transition group-hover:scale-105 sm:h-9 sm:w-9"
         />
       </div>
 
-      <div className="mt-auto">
-        {temConsumo ? (
-          <div className="border-t border-slate-200 pt-3">
-            <div className="flex items-end justify-between gap-3">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                Total
-              </span>
-
-              <strong className="truncate text-xl font-black tabular-nums text-slate-950">
+      <div className="mt-auto pl-1">
+        {temResumoConsumo && (
+          <div className="border-t border-slate-200/80 pt-2">
+            <div className="flex min-w-0 items-end justify-between gap-2">
+              <strong className="min-w-0 truncate text-lg font-black leading-none text-slate-950 sm:text-xl">
                 {formatarValor(
                   mesa.estado.valorAtual,
                 )}
               </strong>
             </div>
 
-            <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-500">
-              <span>
-                {obterTextoPessoas(
-                  mesa.estado.numeroPessoas,
-                )}
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold text-slate-500 sm:text-[11px]">
+              <span className="truncate">
+                {textoPessoas}
               </span>
 
-              <span>
-                {obterTextoContas(
-                  mesa.estado.numeroContas,
-                )}
+              <span
+                aria-hidden="true"
+                className="shrink-0 text-slate-300"
+              >
+                ·
+              </span>
+
+              <span className="truncate">
+                {textoContas}
               </span>
             </div>
           </div>
-        ) : (
-          <div className="border-t border-slate-100 pt-3">
-            <span className="text-[11px] font-semibold text-slate-400">
-              Sem consumo registado
-            </span>
+        )}
+
+        {mesa.estado.emUso && (
+          <div className="truncate border-t border-blue-100 pt-2 text-[10px] font-bold text-blue-700 sm:text-[11px]">
+            Em utilização
+            {mesa.estado.postoEmUso
+              ? ` · ${mesa.estado.postoEmUso}`
+              : ""}
           </div>
         )}
       </div>

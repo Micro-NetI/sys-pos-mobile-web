@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 import DadosPostoPopover from "@/app/components/pos/DadosPostoPopover";
 import MesaCard from "@/app/components/pos/MesaCard_profissional";
@@ -1850,24 +1851,16 @@ function PosPageConteudo() {
   return (
     <main className="h-screen overflow-x-hidden overflow-y-scroll bg-slate-100 text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white shadow-sm">
-        <div className="flex h-16 items-center justify-between gap-2 px-2 sm:gap-4 sm:px-6 lg:px-10">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 font-black text-white shadow-md shadow-blue-600/20 sm:h-11 sm:w-11">
-              S
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                MICRO-NET
-              </p>
-
-              <div className="flex min-w-0 items-center gap-2">
-                <h1 className="truncate text-base font-black sm:text-lg">
-                  SysPOS Mobile
-                </h1>
-
-              </div>
-            </div>
+        <div className="flex h-14 items-center justify-between gap-2 px-2 sm:h-16 sm:gap-4 sm:px-6 lg:px-10">
+          <div className="flex min-w-0 items-center">
+            <Image
+              src="/imagens/app.png"
+              alt="SysPOS Web"
+              width={240}
+              height={72}
+              priority
+              className="h-auto w-[122px] sm:w-[150px] lg:w-[176px]"
+            />
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -2149,16 +2142,35 @@ function PosPageConteudo() {
               disabled={
                 aTrocarPosto
               }
-              className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Sair"
+              title="Sair"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4 sm:text-xs sm:font-bold"
             >
-              {aTrocarPosto
-                ? "A trocar..."
-                : "Sair"}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="h-5 w-5 sm:hidden"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M18 15l3-3m0 0-3-3m3 3H9"
+                />
+              </svg>
+
+              <span className="hidden sm:inline">
+                {aTrocarPosto
+                  ? "A trocar..."
+                  : "Sair"}
+              </span>
             </button>
           </div>
         </div>
 
-        <div className="relative h-14 border-t border-slate-100 bg-white">
+        <div className="relative h-12 border-t border-slate-100 bg-white sm:h-14">
           {podeDeslocarSalasEsquerda && (
             <button
               type="button"
@@ -2356,7 +2368,7 @@ function PosPageConteudo() {
         </div>
 
         {mesasDaPagina.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 lg:gap-4 xl:grid-cols-6 2xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:[grid-template-columns:repeat(auto-fit,minmax(185px,1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(195px,1fr))]">
             {mesasDaPagina.map((mesa) => {
               const selecionada =
                 mesaSelecionada?.idSala ===

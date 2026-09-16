@@ -10,6 +10,7 @@ import {
 import {
   useRouter,
 } from "next/navigation";
+import Image from "next/image";
 
 import type {
   POSMobilePostoDisponivel,
@@ -826,149 +827,148 @@ export default function LoginPage() {
 
 
   return (
-    <main className="min-h-screen overflow-hidden bg-slate-950 p-1 text-slate-100">
-      <div className="mx-auto flex h-[calc(100dvh-0.5rem)] w-full overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900 shadow-2xl shadow-black/40">
+    <main className="min-h-screen bg-slate-950 text-slate-900">
+      <div className="mx-auto flex min-h-[100dvh] w-full overflow-hidden bg-slate-50 lg:min-h-[100dvh]">
 
         {/* =====================================================
-            PAINEL ESQUERDO
+            IDENTIDADE / PAINEL ESQUERDO
             ===================================================== */}
 
-        <section className="relative hidden w-[42%] overflow-hidden bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-800 p-10 lg:flex lg:flex-col lg:justify-between xl:p-12">
-
-          <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-
+        <section className="relative hidden w-[44%] overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+          <div className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-blue-400/20 blur-3xl" />
           <div className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" />
-
-          <div className="absolute left-1/3 top-1/3 h-64 w-64 rounded-full bg-blue-300/10 blur-3xl" />
-
+          <div className="absolute left-1/3 top-1/3 h-72 w-72 rounded-full bg-indigo-400/10 blur-3xl" />
 
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xl font-black text-blue-700 shadow-sm">
-                S
-              </div>
-
-
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-white/70">
-                  MICRO-NET
-                </p>
-
-                <h1 className="text-lg font-bold">
-                  SysPOS Mobile
-                </h1>
-              </div>
-
+            <div className="inline-flex rounded-[1.5rem] border border-white/15 bg-white p-4 shadow-2xl shadow-black/20">
+              <Image
+                src="/imagens/app.png"
+                alt="SysPOS Web"
+                width={520}
+                height={130}
+                priority
+                className="h-auto w-[285px] xl:w-[325px]"
+              />
             </div>
           </div>
 
-
           <div className="relative z-10 max-w-xl">
-
-            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-cyan-100">
-              Ponto de venda
+            <p className="mb-4 text-xs font-black uppercase tracking-[0.34em] text-cyan-200">
+              Ponto de venda web
             </p>
 
-
-            <h2 className="text-4xl font-black leading-tight xl:text-5xl">
+            <h1 className="text-4xl font-black leading-[1.08] tracking-tight xl:text-5xl 2xl:text-6xl">
               Operação rápida,
               <br />
               simples e segura.
-            </h2>
-
+            </h1>
 
             <p className="mt-6 max-w-lg text-base leading-8 text-blue-100 xl:text-lg">
-              Consulte salas, mesas e pedidos
-              através de uma interface otimizada
-              para terminais e tablets.
+              Aceda às mesas, contas, produtos e pagamentos através de uma interface pensada para terminais, tablets e utilização diária em POS.
             </p>
 
+            <div className="mt-8 grid max-w-lg gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur xl:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-5 w-5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                      />
+                    </svg>
+                  </span>
+
+                  <div>
+                    <p className="text-sm font-black">Sessão segura</p>
+                    <p className="mt-0.5 text-xs text-blue-100/90">Operador autenticado</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur xl:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-200">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-5 w-5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3.75 21h16.5M4.5 3h15v18h-15V3Zm4.5 4.5h.008v.008H9V7.5Zm3 0h.008v.008H12V7.5Zm3 0h.008v.008H15V7.5ZM9 12h6"
+                      />
+                    </svg>
+                  </span>
+
+                  <div>
+                    <p className="text-sm font-black">Postos autorizados</p>
+                    <p className="mt-0.5 text-xs text-blue-100/90">Apenas os permitidos</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-
-          <div className="relative z-10 flex flex-wrap gap-3 text-sm text-blue-100">
-
-            <span className="rounded-full border border-white/10 bg-white/10 px-4 py-2 backdrop-blur">
-              Sessão segura
-            </span>
-
-            <span className="rounded-full border border-white/10 bg-white/10 px-4 py-2 backdrop-blur">
-              Posto autorizado
-            </span>
-
+          <div className="relative z-10 flex items-center justify-between text-xs font-semibold text-blue-200">
+            <span>MICRO-NET</span>
+            <span>Ligação segura à APIFNT</span>
           </div>
-
         </section>
 
 
         {/* =====================================================
-            PAINEL LOGIN
+            LOGIN
             ===================================================== */}
 
-        <section className="flex w-full items-center justify-center overflow-y-auto bg-slate-50 p-4 text-slate-900 sm:p-6 lg:w-[58%] lg:p-8 xl:p-10">
+        <section className="flex w-full items-start justify-center overflow-y-auto bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:w-[56%] lg:items-center lg:px-12 lg:py-10 xl:px-20">
+          <div className="w-full max-w-[520px] pt-[4dvh] sm:max-w-[560px] sm:pt-[5dvh] lg:max-w-[600px] lg:pt-0">
 
-          <div className="w-full max-w-lg py-4">
-
-
-            {/* LOGO MOBILE */}
-
-            <div className="mb-6 lg:hidden">
-
-              <div className="inline-flex items-center gap-3">
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-xl font-black text-white shadow-lg shadow-blue-600/30">
-                  S
-                </div>
-
-
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
-                    MICRO-NET
-                  </p>
-
-                  <p className="font-bold text-slate-900">
-                    SysPOS Mobile
-                  </p>
-                </div>
-
-              </div>
-
+            {/* LOGÓTIPO MOBILE / TABLET */}
+            <div className="mb-6 flex h-14 items-center lg:hidden">
+              <Image
+                src="/imagens/app.png"
+                alt="SysPOS Web"
+                width={260}
+                height={65}
+                priority
+                className="h-auto w-[210px] sm:w-[235px]"
+              />
             </div>
 
 
             {/* CABEÇALHO */}
-
-            <div className="mb-5">
-
-              <p className="mb-2 text-sm font-bold uppercase tracking-[0.2em] text-blue-600">
-                Acesso ao sistema
-              </p>
-
-
-              <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+            <div className="mb-5 lg:mb-6">
+              <h2 className="text-[26px] font-black tracking-tight text-slate-950 sm:text-3xl lg:text-[32px]">
                 {fase === "PIN"
-                  ? "Iniciar sessão"
+                  ? "PIN do operador"
                   : "Selecionar posto"}
-              </h1>
+              </h2>
 
-
-              <p className="mt-3 text-base leading-7 text-slate-500">
+              <p className="mt-1 text-sm leading-6 text-slate-500">
                 {fase === "PIN"
-                  ? "Introduza o PIN do operador."
-                  : "Selecione o posto onde pretende iniciar a sessão."}
+                  ? "Introduza o PIN para continuar."
+                  : "Escolha o posto onde pretende trabalhar."}
               </p>
-
             </div>
 
 
             <form
-              className="space-y-5"
-              onSubmit={
-                efetuarLogin
-              }
+              className="space-y-4 lg:space-y-5"
+              onSubmit={efetuarLogin}
             >
-
 
               {/* =================================================
                   FASE 1 - PIN
@@ -976,21 +976,9 @@ export default function LoginPage() {
 
               {fase === "PIN" && (
                 <>
-
                   <div>
-
-                    <label
-                      htmlFor="password"
-                      className="mb-2 block text-sm font-bold text-slate-700"
-                    >
-                      PIN do operador
-                    </label>
-
-
                     <div className="relative">
-
                       <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
-
                         <svg
                           viewBox="0 0 24 24"
                           fill="none"
@@ -1005,78 +993,44 @@ export default function LoginPage() {
                             d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 0h10.5A2.25 2.25 0 0 1 19.5 12.75v6A2.25 2.25 0 0 1 17.25 21H6.75A2.25 2.25 0 0 1 4.5 18.75v-6a2.25 2.25 0 0 1 2.25-2.25Z"
                           />
                         </svg>
-
                       </span>
 
-
                       <input
-                        ref={
-                          inputRef
-                        }
+                        ref={inputRef}
                         id="password"
                         name="password"
-                        type={
-                          mostrarPassword
-                            ? "text"
-                            : "password"
-                        }
+                        type={mostrarPassword ? "text" : "password"}
                         autoComplete="off"
                         inputMode="none"
                         autoFocus
-                        value={
-                          password
-                        }
-                        disabled={
-                          aCarregar
-                        }
-                        onChange={(
-                          event,
-                        ) => {
+                        value={password}
+                        disabled={aCarregar}
+                        onChange={(event) => {
                           const valorNumerico =
-                            event
-                              .target
-                              .value
-                              .replace(
-                                /\D/g,
-                                "",
-                              );
+                            event.target.value.replace(
+                              /\D/g,
+                              "",
+                            );
 
-
-                          setPassword(
-                            valorNumerico,
-                          );
-
-
+                          setPassword(valorNumerico);
                           limparErro();
                         }}
-                        onKeyDown={(
-                          event,
-                        ) => {
-                          if (
-                            event.key ===
-                            "Escape"
-                          ) {
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
                             event.preventDefault();
-
                             limparPin();
                           }
                         }}
                         placeholder="Introduza o PIN"
-                        className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-14 text-center text-2xl font-black tracking-[0.3em] text-slate-900 outline-none transition placeholder:text-base placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        className="h-16 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-14 text-center text-2xl font-black tracking-[0.34em] text-slate-950 shadow-sm outline-none transition placeholder:text-base placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 lg:h-[68px] lg:text-[28px]"
                       />
-
 
                       <button
                         type="button"
-                        disabled={
-                          aCarregar
-                        }
+                        disabled={aCarregar}
                         onClick={() =>
                           setMostrarPassword(
-                            (
-                              valorAtual,
-                            ) =>
-                              !valorAtual,
+                            (valorAtual) => !valorAtual,
                           )
                         }
                         aria-label={
@@ -1086,9 +1040,7 @@ export default function LoginPage() {
                         }
                         className="absolute inset-y-0 right-0 flex w-14 items-center justify-center rounded-r-2xl text-slate-400 transition hover:bg-slate-50 hover:text-blue-600 focus:outline-none focus:ring-4 focus:ring-inset focus:ring-blue-100 disabled:cursor-not-allowed"
                       >
-
                         {mostrarPassword ? (
-
                           <svg
                             viewBox="0 0 24 24"
                             fill="none"
@@ -1103,9 +1055,7 @@ export default function LoginPage() {
                               d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.5a10.523 10.523 0 0 1-4.293 5.772M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242-4.242-4.242"
                             />
                           </svg>
-
                         ) : (
-
                           <svg
                             viewBox="0 0 24 24"
                             fill="none"
@@ -1119,98 +1069,63 @@ export default function LoginPage() {
                               strokeLinejoin="round"
                               d="M2.036 12.322a1.012 1.012 0 0 1 0-.644C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .638C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
                             />
-
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
                             />
                           </svg>
-
                         )}
-
                       </button>
-
                     </div>
-
                   </div>
 
 
                   {/* TECLADO */}
-
-                  <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-
-                    {TECLAS_NUMERICAS.map(
-                      (
-                        digito,
-                      ) => (
-                        <button
-                          key={
-                            digito
-                          }
-                          type="button"
-                          disabled={
-                            aCarregar
-                          }
-                          onClick={() =>
-                            adicionarDigito(
-                              digito,
-                            )
-                          }
-                          className="flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl font-black text-slate-900 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:h-16"
-                        >
-                          {digito}
-                        </button>
-                      ),
-                    )}
-
+                  <div className="grid grid-cols-3 gap-2.5 sm:gap-3 lg:gap-3.5">
+                    {TECLAS_NUMERICAS.map((digito) => (
+                      <button
+                        key={digito}
+                        type="button"
+                        disabled={aCarregar}
+                        onClick={() => adicionarDigito(digito)}
+                        className="flex h-[52px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl font-black text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:h-14 lg:h-[62px] lg:text-[26px]"
+                      >
+                        {digito}
+                      </button>
+                    ))}
 
                     <button
                       type="button"
                       disabled={
                         aCarregar ||
-                        password.length ===
-                          0
+                        password.length === 0
                       }
-                      onClick={
-                        limparPin
-                      }
-                      className="flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300 sm:h-16"
+                      onClick={limparPin}
+                      className="flex h-[52px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300 sm:h-14 lg:h-[62px] lg:text-base"
                     >
                       Limpar
                     </button>
 
-
                     <button
                       type="button"
-                      disabled={
-                        aCarregar
-                      }
-                      onClick={() =>
-                        adicionarDigito(
-                          "0",
-                        )
-                      }
-                      className="flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl font-black text-slate-900 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:h-16"
+                      disabled={aCarregar}
+                      onClick={() => adicionarDigito("0")}
+                      className="flex h-[52px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl font-black text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:h-14 lg:h-[62px] lg:text-[26px]"
                     >
                       0
                     </button>
-
 
                     <button
                       type="button"
                       disabled={
                         aCarregar ||
-                        password.length ===
-                          0
+                        password.length === 0
                       }
-                      onClick={
-                        apagarUltimoDigito
-                      }
+                      onClick={apagarUltimoDigito}
                       aria-label="Apagar último dígito"
-                      className="flex h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300 sm:h-16"
+                      className="flex h-[52px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300 sm:h-14 lg:h-[62px]"
                     >
-
                       <svg
                         viewBox="0 0 24 24"
                         fill="none"
@@ -1224,18 +1139,14 @@ export default function LoginPage() {
                           strokeLinejoin="round"
                           d="M21 4H8l-5 8 5 8h13a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z"
                         />
-
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           d="m18 9-6 6m0-6 6 6"
                         />
                       </svg>
-
                     </button>
-
                   </div>
-
                 </>
               )}
 
@@ -1246,171 +1157,154 @@ export default function LoginPage() {
 
               {fase === "POSTO" && (
                 <>
-
-                  {/* OPERADOR AUTENTICADO */}
-
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
                     <div className="flex items-center gap-3">
-
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-sm font-black text-white">
-                        ✓
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          className="h-6 w-6"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.118a7.5 7.5 0 0 1 15 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.5-1.632Z"
+                          />
+                        </svg>
                       </div>
 
-
-                      <div className="min-w-0">
-
-                        <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">
                           Operador autenticado
                         </p>
-
-                        <p className="truncate text-base font-black text-slate-900">
-                          {utilizadorPreparado
-                            ?.login ||
-                            "Operador"}
+                        <p className="mt-0.5 truncate text-base font-black text-slate-950">
+                          {utilizadorPreparado?.login || "Operador"}
                         </p>
-
                       </div>
 
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          className="h-5 w-5"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m4.5 12.75 6 6 9-13.5"
+                          />
+                        </svg>
+                      </span>
                     </div>
-
                   </div>
 
-
-                  {/* SELEÇÃO DO POSTO */}
 
                   <div>
+                    <div className="mb-3 flex items-center justify-between gap-4">
+                      <label className="text-sm font-black text-slate-700">
+                        Posto de trabalho
+                      </label>
 
-                    <label
-                      htmlFor="idPosto"
-                      className="mb-2 block text-sm font-bold text-slate-700"
-                    >
-                      Posto
-                    </label>
-
-
-                    <div className="relative">
-
-                      <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
-
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          className="h-5 w-5"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 10h.01M12 10h.01M16 10h.01"
-                          />
-                        </svg>
-
+                      <span className="text-xs font-bold text-slate-400">
+                        {postos.length === 1
+                          ? "1 disponível"
+                          : `${postos.length} disponíveis`}
                       </span>
-
-
-                      <select
-                        id="idPosto"
-                        name="idPosto"
-                        value={
-                          idPosto
-                        }
-                        disabled={
-                          aCarregar ||
-                          postos.length ===
-                            0
-                        }
-                        onChange={(
-                          event,
-                        ) => {
-                          const novoIdPosto =
-                            Number(
-                              event
-                                .target
-                                .value,
-                            );
-
-
-                          setIdPosto(
-                            novoIdPosto,
-                          );
-
-
-                          limparErro();
-                        }}
-                        className="h-14 w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-12 pr-12 text-sm font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                      >
-
-                        {postos.map(
-                          (
-                            posto,
-                          ) => (
-                            <option
-                              key={
-                                posto.idPosto
-                              }
-                              value={
-                                posto.idPosto
-                              }
-                            >
-                              {
-                                posto.nomeExibicao
-                              }
-
-                              {" · "}
-
-                              {
-                                posto.numeroSalas
-                              }
-
-                              {" "}
-
-                              {posto.numeroSalas ===
-                              1
-                                ? "sala"
-                                : "salas"}
-                            </option>
-                          ),
-                        )}
-
-                      </select>
-
-
-                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
-
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          className="h-5 w-5"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m6 9 6 6 6-6"
-                          />
-                        </svg>
-
-                      </span>
-
                     </div>
 
+                    <div
+                      role="radiogroup"
+                      aria-label="Posto de trabalho"
+                      className="max-h-[360px] space-y-2.5 overflow-y-auto pr-1 lg:max-h-[420px]"
+                    >
+                      {postos.map((posto) => {
+                        const selecionado =
+                          posto.idPosto === idPosto;
 
-                    <p className="mt-2 text-xs font-medium text-slate-400">
+                        return (
+                          <button
+                            key={posto.idPosto}
+                            type="button"
+                            role="radio"
+                            aria-checked={selecionado}
+                            disabled={aCarregar}
+                            onClick={() => {
+                              setIdPosto(posto.idPosto);
+                              limparErro();
+                            }}
+                            className={[
+                              "group flex w-full items-center gap-4 rounded-2xl border p-4 text-left shadow-sm transition",
+                              selecionado
+                                ? "border-blue-500 bg-blue-50 ring-4 ring-blue-100"
+                                : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/40",
+                              aCarregar
+                                ? "cursor-not-allowed opacity-60"
+                                : "cursor-pointer",
+                            ].join(" ")}
+                          >
+                            <span
+                              className={[
+                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition",
+                                selecionado
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-700",
+                              ].join(" ")}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                className="h-5 w-5"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 10h.01M12 10h.01M16 10h.01"
+                                />
+                              </svg>
+                            </span>
 
-                      {postos.length ===
-                      1
-                        ? "1 posto disponível para este operador."
-                        : `${postos.length} postos disponíveis para este operador.`}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-black text-slate-950 sm:text-base">
+                                {posto.nomeExibicao}
+                              </p>
 
-                    </p>
+                              <p className="mt-1 text-xs font-semibold text-slate-500">
+                                {posto.codigo
+                                  ? `${posto.codigo} · `
+                                  : ""}
+                                {posto.numeroSalas}{" "}
+                                {posto.numeroSalas === 1
+                                  ? "sala"
+                                  : "salas"}
+                              </p>
+                            </div>
 
+                            <span
+                              className={[
+                                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition",
+                                selecionado
+                                  ? "border-blue-600 bg-blue-600"
+                                  : "border-slate-300 bg-white",
+                              ].join(" ")}
+                            >
+                              {selecionado && (
+                                <span className="h-2 w-2 rounded-full bg-white" />
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-
                 </>
               )}
 
@@ -1420,12 +1314,10 @@ export default function LoginPage() {
                   ================================================= */}
 
               {mensagemErro && (
-
                 <div
                   role="alert"
-                  className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+                  className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
                 >
-
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
@@ -1441,41 +1333,13 @@ export default function LoginPage() {
                     />
                   </svg>
 
-
-                  <span>
-                    {mensagemErro}
-                  </span>
-
+                  <span>{mensagemErro}</span>
                 </div>
-
               )}
 
 
               {/* =================================================
-                  VOLTAR
-                  ================================================= */}
-
-              {fase ===
-                "POSTO" && (
-
-                <button
-                  type="button"
-                  disabled={
-                    aCarregar
-                  }
-                  onClick={
-                    voltarAoPin
-                  }
-                  className="flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Utilizar outro operador
-                </button>
-
-              )}
-
-
-              {/* =================================================
-                  BOTÃO PRINCIPAL
+                  AÇÕES
                   ================================================= */}
 
               <button
@@ -1483,48 +1347,33 @@ export default function LoginPage() {
                 disabled={
                   aCarregar ||
                   (
-                    fase ===
-                    "PIN"
-                      ? password.length ===
-                        0
+                    fase === "PIN"
+                      ? password.length === 0
                       : (
-                          !Number.isInteger(
-                            idPosto,
-                          ) ||
-                          idPosto <=
-                            0 ||
-                          postos.length ===
-                            0
+                          !Number.isInteger(idPosto) ||
+                          idPosto <= 0 ||
+                          postos.length === 0
                         )
                   )
                 }
-                className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 text-base font-bold text-white shadow-lg shadow-blue-600/25 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-600/30 focus:outline-none focus:ring-4 focus:ring-blue-200 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-blue-400 disabled:hover:translate-y-0"
+                className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 text-base font-black text-white shadow-lg shadow-blue-600/25 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-600/30 focus:outline-none focus:ring-4 focus:ring-blue-200 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-blue-400 disabled:hover:translate-y-0 lg:h-16 lg:text-lg"
               >
-
                 {aCarregar ? (
                   <>
-
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-
-
                     <span>
-                      {fase ===
-                      "PIN"
+                      {fase === "PIN"
                         ? "A validar operador..."
                         : "A iniciar sessão..."}
                     </span>
-
                   </>
                 ) : (
                   <>
-
                     <span>
-                      {fase ===
-                      "PIN"
+                      {fase === "PIN"
                         ? "Continuar"
                         : "Entrar no POS"}
                     </span>
-
 
                     <svg
                       viewBox="0 0 24 24"
@@ -1540,34 +1389,45 @@ export default function LoginPage() {
                         d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
                       />
                     </svg>
-
                   </>
                 )}
-
               </button>
 
+              {fase === "POSTO" && (
+                <button
+                  type="button"
+                  disabled={aCarregar}
+                  onClick={voltarAoPin}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 text-sm font-black text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+                    />
+                  </svg>
+
+                  Utilizar outro operador
+                </button>
+              )}
             </form>
 
 
             {/* RODAPÉ */}
-
-            <div className="mt-5 flex items-center justify-between gap-4 border-t border-slate-200 pt-4 text-xs font-medium text-slate-400">
-
-              <span>
-                SysPOS Mobile
-              </span>
-
-
-              <span className="text-right">
-                Ligação segura à APIFNT
-              </span>
-
+            <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 pt-4 text-[11px] font-semibold text-slate-400 sm:text-xs lg:mt-7">
+              <span>SysPOS Web</span>
+              <span className="text-right">Ligação segura à APIFNT</span>
             </div>
-
           </div>
-
         </section>
-
       </div>
     </main>
   );

@@ -29,9 +29,17 @@ import ProgramaParcialModal from "@/app/components/pos/programas/ProgramaParcial
 import PesquisarClienteModal from "@/app/components/pos/clientes/PesquisarClienteModal";
 import PagamentoDrawer from "@/app/components/pos/pagamentos/PagamentoDrawer";
 import ReservasHotelModal from "@/app/components/pos/pagamentos/ReservasHotelModal";
-import AbrirCaixaModal from "@/app/components/pos/pagamentos/AbrirCaixaModal";
 import EditorPedidoTable from "@/app/components/pos/editor-pedido/EditorPedidoTable";
 import CatalogoGrupoLink from "@/app/components/pos/CatalogoGrupoLink";
+import EditorConsumo from "@/app/components/pos/mesa/EditorConsumo";
+import ResumoConsumos from "@/app/components/pos/mesa/ResumoConsumos";
+import ContaResumo from "@/app/components/pos/mesa/ContaResumo";
+import ContasRapidasDrawer, {
+  type ContaRapidaItem,
+} from "@/app/components/pos/mesa/ContasRapidasDrawer";
+import TabsConsumoConta, {
+  type SeparadorMesa,
+} from "@/app/components/pos/mesa/TabsConsumoConta";
 import PagamentoConfirmacaoModal, {
   type PagamentoConfirmacaoValores,
 } from "@/app/components/pos/pagamentos/PagamentoConfirmacaoModal";
@@ -76,10 +84,6 @@ import type {
   POSMobilePrepararPagamentoDados,
   POSMobilePrepararPagamentoResposta,
 } from "@/types/pos-mobile-pagamentos";
-import type {
-  POSMobileCaixaDados,
-  POSMobileCaixaResposta,
-} from "@/types/pos-mobile-caixa";
 import type {
   POSMobileClienteResumo,
 } from "@/types/pos-mobile-clientes";
@@ -139,23 +143,6 @@ interface POSMobileCatalogoBotao {
   preco: number;
   precoEncontrado: boolean;
   precoVariavel: boolean;
-
-  /*
-    Configuração do produto associado correspondente
-    ao produto + tabela de preços efetiva.
-
-    modoLancamento:
-      1 = manual
-      2 = automático
-      3 = pergunta ao operador
-  */
-  produtoAssociado: {
-    idProduto: number;
-    descricao: string | null;
-    modoLancamento: number;
-    preco: number;
-    precoEncontrado: boolean;
-  } | null;
 
   cor: string | null;
   corLetra: string | null;
@@ -245,13 +232,6 @@ interface ProdutoPendenteComentario {
   preco: number;
   precoAlterado: boolean;
   justificacaoAlteracaoPreco: string | null;
-}
-
-interface ProdutoAssociadoPendente {
-  botaoOrigem: POSMobileCatalogoBotao;
-  produtoAssociado: NonNullable<
-    POSMobileCatalogoBotao["produtoAssociado"]
-  >;
 }
 
 interface ProgramaParcialPendente {
@@ -1102,126 +1082,6 @@ function obterChaveFeedbackProduto(
   ].join("-");
 }
 
-function criarBotaoProdutoAssociado(
-  botaoOrigem: POSMobileCatalogoBotao,
-  produtoAssociado: NonNullable<
-    POSMobileCatalogoBotao["produtoAssociado"]
-  >,
-): POSMobileCatalogoBotao {
-  return {
-    /*
-      O produto associado não depende de existir um botão visual
-      no catálogo atual.
-
-      O preço recebido aqui já foi resolvido pela APIFNT usando
-      a mesma tabela de preços efetiva do produto principal.
-    */
-    idBotao: null,
-
-    idGrupo:
-      botaoOrigem.idGrupo,
-
-    idGProdutos:
-      botaoOrigem.idGProdutos,
-
-    numeroPagina:
-      botaoOrigem.numeroPagina,
-
-    posicao:
-      botaoOrigem.posicao,
-
-    tipoBotao:
-      "PRODUTO",
-
-    idProduto:
-      produtoAssociado.idProduto,
-
-    idGrupoLink:
-      null,
-
-    descricao:
-      produtoAssociado.descricao?.trim() ||
-      `Produto ${produtoAssociado.idProduto}`,
-
-    descricaoPagina:
-      null,
-
-    tipoProduto:
-      null,
-
-    preco:
-      produtoAssociado.preco,
-
-    precoEncontrado:
-      produtoAssociado.precoEncontrado,
-
-    precoVariavel:
-      false,
-
-    /*
-      Não propagamos novamente a associação do produto de origem.
-      O associado lançado aqui é o produto identificado pela APIFNT.
-    */
-    produtoAssociado:
-      null,
-
-    cor:
-      null,
-
-    corLetra:
-      null,
-
-    corPreco:
-      null,
-
-    corPrecoLetra:
-      null,
-
-    nomeImagem:
-      null,
-
-    tamanhoLetra:
-      0,
-
-    letraNegrito:
-      false,
-
-    letraItalico:
-      false,
-
-    letraSublinhado:
-      false,
-
-    usaBevel:
-      false,
-
-    larguraBevel:
-      0,
-
-    corBevel:
-      null,
-
-    tamanhoBotao:
-      0,
-
-    favorito:
-      false,
-
-    visivel:
-      true,
-
-    abrirComentario:
-      false,
-
-    idGrupoComentario:
-      null,
-
-    fecharJanelaLink:
-      false,
-  };
-}
-
-
 function criarAssinaturaComentarios(
   comentarios: POSMobileComentarioSelecionado[],
 ): string {
@@ -1917,6 +1777,26 @@ console.log(
       "ABERTURA",
     );
 
+  /*
+    Separação visual mobile inspirada no fluxo Kotlin.
+
+    CONSUMO:
+      mantém o catálogo e a adição de produtos.
+
+    CONTA:
+      reutiliza o bottom sheet do pedido/conta que já existia,
+      sem duplicar a lógica do editor, pagamento, segue ou consulta.
+
+    Nesta primeira fase o desktop mantém exatamente o comportamento
+    anterior. A divisão visual aplica-se apenas abaixo de lg.
+  */
+  const [
+    separadorMesa,
+    setSeparadorMesa,
+  ] = useState<SeparadorMesa>(
+    "CONSUMO",
+  );
+
   const [pesquisa, setPesquisa] =
     useState("");
 
@@ -1983,61 +1863,6 @@ console.log(
   */
   const pagamentoEmExecucaoRef =
     useRef(false);
-
-  /*
-    ==========================================================================
-    CAIXA
-    ==========================================================================
-
-    O browser nunca escolhe IDPosto, IDCaixa ou IDCabCaixa como autoridade.
-
-    Antes de gravar uma venda perguntamos à APIFNT pelo estado do caixa do
-    posto autenticado:
-
-      - se já estiver aberto, continuamos e a venda fica associada ao caixa
-        existente pelo backend;
-      - se estiver fechado e puder abrir, mostramos AbrirCaixaModal;
-      - depois de AbrirCaixa devolver sucesso, retomamos exatamente o mesmo
-        pagamento;
-      - no TPA fazemos nova validação imediatamente antes da finalização da
-        venda, sem criar outro PedidoId.
-
-    O resolver permite que confirmarPagamentoPreparado fique literalmente à
-    espera da decisão do operador sem duplicar o fluxo de pagamento.
-    ==========================================================================
-  */
-  const [
-    mostrarAbrirCaixa,
-    setMostrarAbrirCaixa,
-  ] = useState(false);
-
-  const [
-    caixaPendente,
-    setCaixaPendente,
-  ] = useState<POSMobileCaixaDados | null>(
-    null,
-  );
-
-  const [
-    aAbrirCaixa,
-    setAAbrirCaixa,
-  ] = useState(false);
-
-  const [
-    mensagemErroCaixa,
-    setMensagemErroCaixa,
-  ] = useState("");
-
-  const accessTokenCaixaRef =
-    useRef("");
-
-  const resolverAberturaCaixaRef =
-    useRef<
-      ((
-        caixa: POSMobileCaixaDados | null,
-      ) => void) |
-      null
-    >(null);
 
   /*
     ==========================================================================
@@ -2193,14 +2018,6 @@ console.log(
     );
 
   const [
-    produtoAssociadoPendente,
-    setProdutoAssociadoPendente,
-  ] =
-    useState<ProdutoAssociadoPendente | null>(
-      null,
-    );
-
-  const [
     idLinhaSelecionada,
     setIdLinhaSelecionada,
   ] = useState<string | null>(null);
@@ -2344,6 +2161,30 @@ console.log(
   const [
     mostrarPedidoMobile,
     setMostrarPedidoMobile,
+  ] = useState(false);
+
+  /*
+    Resumo dos NOVOS consumos em mobile.
+
+    É diferente da Conta:
+      - Consumo = linhas NOVA ainda não persistidas;
+      - Conta   = linhas EXISTENTE já gravadas.
+  */
+  const [
+    mostrarResumoConsumosMobile,
+    setMostrarResumoConsumosMobile,
+  ] = useState(false);
+
+  /*
+    Drawer de acesso rápido às contas.
+
+    Nesta integração inicial a página já conhece a conta atualmente aberta.
+    Quando ligarmos o endpoint de "todas as contas da mesa", basta alimentar
+    o mesmo componente com essa lista, sem alterar o Drawer.
+  */
+  const [
+    mostrarContasRapidas,
+    setMostrarContasRapidas,
   ] = useState(false);
 
   const [
@@ -3150,6 +2991,21 @@ console.log(
         );
     }, [linhasEditor]);
 
+  const totalValorProdutosNovos =
+    useMemo(() => {
+      return linhasEditor
+        .filter(
+          (linha) =>
+            linha.origem === "NOVA" &&
+            linha.precoEncontrado,
+        )
+        .reduce(
+          (total, linha) =>
+            total + linha.valorTotal,
+          0,
+        );
+    }, [linhasEditor]);
+
   const temPrecosPendentes =
     useMemo(() => {
       return linhasEditor.some(
@@ -3165,6 +3021,111 @@ console.log(
           linha.origem === "NOVA",
       );
     }, [linhasEditor]);
+
+  /*
+    Fonte temporária do menu rápido.
+
+    A página atual carrega apenas uma conta concreta através de conta-mesa.
+    Por isso, até existir/ser ligado o endpoint que devolve TODAS as contas
+    abertas da mesa, o Drawer recebe a conta atualmente carregada.
+
+    A estrutura já fica preparada para várias contas.
+
+    IMPORTANTE:
+    este useMemo tem de ficar depois de temAlteracoesPendentes, porque usa
+    essa constante tanto no cálculo de podePagar como no array de dependências.
+  */
+const contasRapidas =
+  useMemo<ContaRapidaItem[]>(() => {
+    if (!contaCarregada) {
+      return [];
+    }
+
+    /*
+      POSMobileContaMesa permite que estes IDs venham a null.
+
+      Para o menu de contas rápidas precisamos obrigatoriamente
+      de uma conta persistida e identificada.
+    */
+    const idMovimentoMesa =
+      contaCarregada.idMovimentoMesa ??
+      obterIdNumerico(
+        searchParams.get(
+          "idMovimentoMesa",
+        ),
+      );
+
+    const idInternoConta =
+      contaCarregada.idInterno ??
+      obterIdNumerico(
+        searchParams.get(
+          "idInterno",
+        ),
+      );
+
+    if (
+      idMovimentoMesa <= 0 ||
+      idInternoConta <= 0
+    ) {
+      return [];
+    }
+
+    const linhasExistentes =
+      linhasEditor.filter(
+        (linha) =>
+          linha.origem ===
+          "EXISTENTE",
+      );
+
+    const numeroItens =
+      linhasExistentes.reduce(
+        (total, linha) =>
+          total +
+          linha.quantidade,
+        0,
+      );
+
+    return [
+      {
+        idMovimentoMesa,
+
+        idInternoConta,
+
+        numeroConta:
+          contaCarregada.idConta,
+
+        descricaoConta:
+          contaCarregada.descricaoConta ||
+          `Conta ${contaCarregada.idConta}`,
+
+        numeroPessoas:
+          contaCarregada.numeroPessoas,
+
+        numeroItens,
+
+        valorTotal:
+          contaCarregada.valorTotal,
+
+        selecionada:
+          true,
+
+        podePagar:
+          !temAlteracoesPendentes &&
+          contaCarregada.valorTotal >
+            0,
+
+        mensagemPagamento:
+          temAlteracoesPendentes
+            ? "Confirme primeiro os novos consumos."
+            : null,
+      },
+    ];
+  }, [
+    contaCarregada,
+    linhasEditor,
+    temAlteracoesPendentes,
+    searchParams,
+  ]);
 
   const linhaSelecionada =
     useMemo<ItemPedidoEditor | null>(() => {
@@ -4115,339 +4076,6 @@ console.log(
   }
 
 
-  function concluirEsperaAberturaCaixa(
-    caixa: POSMobileCaixaDados | null,
-  ) {
-    const resolver =
-      resolverAberturaCaixaRef.current;
-
-    resolverAberturaCaixaRef.current =
-      null;
-
-    accessTokenCaixaRef.current =
-      "";
-
-    setMostrarAbrirCaixa(
-      false,
-    );
-
-    setAAbrirCaixa(
-      false,
-    );
-
-    setCaixaPendente(
-      null,
-    );
-
-    setMensagemErroCaixa(
-      "",
-    );
-
-    if (resolver) {
-      resolver(
-        caixa,
-      );
-    }
-  }
-
-
-  function pedirAberturaCaixa(
-    accessToken: string,
-    caixa: POSMobileCaixaDados,
-  ): Promise<POSMobileCaixaDados | null> {
-    if (
-      resolverAberturaCaixaRef.current !==
-      null
-    ) {
-      console.warn(
-        "Pedido de abertura de caixa ignorado: já existe uma confirmação aberta.",
-      );
-
-      return Promise.resolve(
-        null,
-      );
-    }
-
-    accessTokenCaixaRef.current =
-      accessToken.trim();
-
-    setCaixaPendente(
-      caixa,
-    );
-
-    setMensagemErroCaixa(
-      "",
-    );
-
-    setMostrarAbrirCaixa(
-      true,
-    );
-
-    return new Promise<
-      POSMobileCaixaDados | null
-    >(
-      (resolve) => {
-        resolverAberturaCaixaRef.current =
-          resolve;
-      },
-    );
-  }
-
-
-  function cancelarAberturaCaixa() {
-    if (aAbrirCaixa) {
-      return;
-    }
-
-    concluirEsperaAberturaCaixa(
-      null,
-    );
-  }
-
-
-  async function confirmarAberturaCaixa(
-    fundoCaixa: number,
-  ) {
-    if (
-      aAbrirCaixa ||
-      !caixaPendente
-    ) {
-      return;
-    }
-
-    const accessToken =
-      accessTokenCaixaRef.current.trim();
-
-    if (!accessToken) {
-      setMensagemErroCaixa(
-        "Não foi possível identificar a sessão para abrir o caixa.",
-      );
-
-      return;
-    }
-
-    setAAbrirCaixa(
-      true,
-    );
-
-    setMensagemErroCaixa(
-      "",
-    );
-
-    try {
-      const response =
-        await fetch(
-          "/api/pos-mobile/abrir-caixa",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Accept:
-                "application/json",
-            },
-            body:
-              JSON.stringify({
-                accessToken,
-                fundoCaixa,
-              }),
-          },
-        );
-
-      const resultado =
-        (await response.json()) as
-          POSMobileCaixaResposta;
-
-      if (
-        response.status === 401
-      ) {
-        sessionStorage.removeItem(
-          "posMobileAccessToken",
-        );
-
-        concluirEsperaAberturaCaixa(
-          null,
-        );
-
-        router.replace(
-          "/login",
-        );
-
-        return;
-      }
-
-      if (
-        !response.ok ||
-        !resultado.sucesso ||
-        !resultado.dados ||
-        !resultado.dados.aberto
-      ) {
-        throw new Error(
-          resultado.mensagem ||
-            "Não foi possível abrir o caixa.",
-        );
-      }
-
-      console.log(
-        "Caixa disponível para a venda:",
-        {
-          idPosto:
-            resultado.dados.idPosto,
-          idCaixa:
-            resultado.dados.idCaixa,
-          idCabCaixa:
-            resultado.dados.idCabCaixa,
-          abertoAgora:
-            resultado.dados.abertoAgora,
-          jaEstavaAberto:
-            resultado.dados.jaEstavaAberto,
-        },
-      );
-
-      concluirEsperaAberturaCaixa(
-        resultado.dados,
-      );
-    } catch (error) {
-      setMensagemErroCaixa(
-        error instanceof Error
-          ? error.message
-          : "Ocorreu um erro ao abrir o caixa.",
-      );
-    } finally {
-      setAAbrirCaixa(
-        false,
-      );
-    }
-  }
-
-
-  async function garantirCaixaAberto(
-    accessToken: string,
-  ): Promise<POSMobileCaixaDados> {
-    const token =
-      accessToken.trim();
-
-    if (!token) {
-      throw new Error(
-        "Não foi possível identificar a sessão para validar o caixa.",
-      );
-    }
-
-    let response: Response;
-
-    try {
-      response =
-        await fetch(
-          "/api/pos-mobile/estado-caixa",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Accept:
-                "application/json",
-            },
-            body:
-              JSON.stringify({
-                accessToken:
-                  token,
-              }),
-            cache:
-              "no-store",
-          },
-        );
-    } catch (error) {
-      throw new Error(
-        error instanceof Error
-          ? `Não foi possível consultar o caixa: ${error.message}`
-          : "Não foi possível consultar o caixa.",
-      );
-    }
-
-    const resultado =
-      (await response.json()) as
-        POSMobileCaixaResposta;
-
-    if (
-      response.status === 401
-    ) {
-      sessionStorage.removeItem(
-        "posMobileAccessToken",
-      );
-
-      router.replace(
-        "/login",
-      );
-
-      throw new Error(
-        "A sessão expirou durante a validação do caixa.",
-      );
-    }
-
-    if (
-      !response.ok ||
-      !resultado.sucesso ||
-      !resultado.dados
-    ) {
-      throw new Error(
-        resultado.mensagem ||
-          "Não foi possível validar o estado do caixa.",
-      );
-    }
-
-    if (
-      resultado.dados.aberto
-    ) {
-      /*
-        O caixa já existe e está aberto.
-
-        Não enviamos IDCabCaixa para a venda como autoridade. A associação ao
-        caixa corrente continua a ser resolvida pela APIFNT através do posto
-        autenticado.
-      */
-      console.log(
-        "Caixa já aberto; a venda usará o caixa existente:",
-        {
-          idPosto:
-            resultado.dados.idPosto,
-          idCaixa:
-            resultado.dados.idCaixa,
-          idCabCaixa:
-            resultado.dados.idCabCaixa,
-        },
-      );
-
-      return resultado.dados;
-    }
-
-    if (
-      !resultado.dados.podeAbrir
-    ) {
-      throw new Error(
-        resultado.mensagem ||
-          "O caixa está fechado e não pode ser aberto neste momento.",
-      );
-    }
-
-    const caixaAberto =
-      await pedirAberturaCaixa(
-        token,
-        resultado.dados,
-      );
-
-    if (
-      !caixaAberto ||
-      !caixaAberto.aberto
-    ) {
-      throw new Error(
-        "A abertura do caixa foi cancelada. O pagamento não foi efetuado.",
-      );
-    }
-
-    return caixaAberto;
-  }
-
-
   async function executarFluxoPagamentoIntegrado(
     pedido: PagamentoPedidoFuncional,
     valorPreparado: number,
@@ -4822,33 +4450,6 @@ console.log(
       cliente e o valor antes de persistir o documento.
       ========================================================================
     */
-    setPagamentoIntegradoVisual({
-      pedidoId,
-      estado:
-        estadoAtual ||
-        "APROVADO",
-      mensagem:
-        "Pagamento confirmado. A validar o caixa antes de emitir o documento...",
-      valor: valorAtual,
-    });
-
-    /*
-      Se o pedido já estiver ASSOCIADO_VENDA, a venda já foi persistida e a
-      chamada seguinte é apenas reconciliação idempotente.
-
-      Nos restantes estados finalizáveis garantimos novamente o caixa
-      imediatamente antes de gravar a venda. Se entretanto o caixa tiver sido
-      fechado, o operador pode reabri-lo sem criar um segundo PedidoId/TPA.
-    */
-    if (
-      estadoAtual !==
-      "ASSOCIADO_VENDA"
-    ) {
-      await garantirCaixaAberto(
-        pedido.accessToken,
-      );
-    }
-
     setPagamentoIntegradoVisual({
       pedidoId,
       estado:
@@ -5307,17 +4908,6 @@ console.log(
         );
       }
 
-      /*
-        Antes de qualquer cobrança/faturação garantimos que o posto possui
-        caixa aberto.
-
-        Se já estiver aberto, a APIFNT associa a venda ao caixa existente.
-        Se estiver fechado, o fluxo fica à espera do AbrirCaixaModal.
-      */
-      await garantirCaixaAberto(
-        accessToken,
-      );
-
       if (
         integracao.integracaoPagamento &&
         integracao.tipoIntegracaoPagamento ===
@@ -5392,7 +4982,7 @@ console.log(
           pedido,
         );
 
-        let response =
+        const response =
           await fetch(
             "/api/pos-mobile/efetuar-pagamento",
             {
@@ -5410,52 +5000,9 @@ console.log(
             },
           );
 
-        let resultado =
+        const resultado =
           (await response.json()) as
             POSMobileEfetuarPagamentoResposta;
-
-        /*
-          Proteção adicional contra concorrência:
-
-          mesmo tendo validado o caixa imediatamente antes, ele pode ter sido
-          fechado por outro terminal entre EstadoCaixa e EfetuarPagamento.
-
-          Se a própria operação financeira devolver CAIXA_FECHADO, abrimos /
-          associamos o caixa e repetimos UMA ÚNICA VEZ exatamente o mesmo
-          pedido. Não repetimos para qualquer outro erro.
-        */
-        if (
-          resultado.codigo
-            ?.trim()
-            .toUpperCase() ===
-            "CAIXA_FECHADO"
-        ) {
-          await garantirCaixaAberto(
-            accessToken,
-          );
-
-          response =
-            await fetch(
-              "/api/pos-mobile/efetuar-pagamento",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type":
-                    "application/json",
-                  Accept:
-                    "application/json",
-                },
-                body:
-                  JSON.stringify(
-                    pedido,
-                  ),
-              },
-            );
-
-          resultado =
-            (await response.json()) as
-              POSMobileEfetuarPagamentoResposta;
-        }
 
         console.log(
           "HTTP status:",
@@ -5841,143 +5388,6 @@ console.log(
       }, 650);
   }
 
-  function lancarProdutoAssociado(
-    botaoOrigem: POSMobileCatalogoBotao,
-    produtoAssociado: NonNullable<
-      POSMobileCatalogoBotao["produtoAssociado"]
-    >,
-  ) {
-    if (
-      !botaoOrigem.idProduto ||
-      botaoOrigem.idProduto <= 0 ||
-      produtoAssociado.idProduto <= 0
-    ) {
-      return;
-    }
-
-    /*
-      Mesma proteção existente no POS legado:
-      um produto não se lança a si próprio como associado.
-    */
-    if (
-      produtoAssociado.idProduto ===
-      botaoOrigem.idProduto
-    ) {
-      return;
-    }
-
-    const botaoAssociado =
-      criarBotaoProdutoAssociado(
-        botaoOrigem,
-        produtoAssociado,
-      );
-
-    /*
-      Passa pela mesma pipeline de produto do editor.
-
-      Se o preço do associado não tiver sido encontrado,
-      a pipeline atual abre o editor de preço em vez de
-      copiar ou inventar o preço do produto principal.
-    */
-    adicionarProduto(
-      botaoAssociado,
-    );
-  }
-
-
-  function tratarProdutoAssociadoAposLancamento(
-    botao: POSMobileCatalogoBotao,
-  ) {
-    const produtoAssociado =
-      botao.produtoAssociado;
-
-    if (
-      !produtoAssociado ||
-      !botao.idProduto ||
-      botao.idProduto <= 0 ||
-      produtoAssociado.idProduto <= 0
-    ) {
-      return;
-    }
-
-    /*
-      Proteção do POS legado contra auto-associação.
-    */
-    if (
-      produtoAssociado.idProduto ===
-      botao.idProduto
-    ) {
-      return;
-    }
-
-    switch (
-      produtoAssociado.modoLancamento
-    ) {
-      /*
-        0 = não lança
-        1 = manual
-
-        Em ambos os casos não existe lançamento automático.
-      */
-      case 0:
-      case 1:
-        return;
-
-      /*
-        2 = automático
-      */
-      case 2:
-        lancarProdutoAssociado(
-          botao,
-          produtoAssociado,
-        );
-        return;
-
-      /*
-        3 = pergunta ao operador.
-
-        O produto principal já foi adicionado antes de
-        chegarmos aqui. "Não" e "Cancelar" deixam-no intacto.
-      */
-      case 3:
-        setProdutoAssociadoPendente({
-          botaoOrigem:
-            botao,
-
-          produtoAssociado,
-        });
-        return;
-
-      default:
-        return;
-    }
-  }
-
-
-  function responderProdutoAssociado(
-    lancar: boolean,
-  ) {
-    const pendente =
-      produtoAssociadoPendente;
-
-    setProdutoAssociadoPendente(
-      null,
-    );
-
-    if (
-      !lancar ||
-      !pendente
-    ) {
-      return;
-    }
-
-    lancarProdutoAssociado(
-      pendente.botaoOrigem,
-      pendente.produtoAssociado,
-    );
-  }
-
-
   function adicionarProdutoResolvido(
     botao: POSMobileCatalogoBotao,
     preco: number,
@@ -6085,14 +5495,6 @@ console.log(
     );
 
     sinalizarProdutoAdicionado(
-      botao,
-    );
-
-    /*
-      O produto principal já ficou no editor.
-      Só agora aplicamos a regra do produto associado.
-    */
-    tratarProdutoAssociadoAposLancamento(
       botao,
     );
   }
@@ -6582,26 +5984,6 @@ console.log(
 
       precoVariavel:
         false,
-
-      produtoAssociado:
-        botao.produtoAssociado
-          ? {
-              idProduto:
-                botao.produtoAssociado.idProduto,
-
-              descricao:
-                botao.produtoAssociado.descricao,
-
-              modoLancamento:
-                botao.produtoAssociado.modoLancamento,
-
-              preco:
-                botao.produtoAssociado.preco,
-
-              precoEncontrado:
-                botao.produtoAssociado.precoEncontrado,
-            }
-          : null,
 
       cor:
         botao.cor?.trim() ||
@@ -10381,6 +9763,117 @@ identificacao =
 
   /*
     ==========================================================================
+    CONFIRMAR CONSUMOS
+    ==========================================================================
+
+    Fluxo Kotlin:
+      - grava apenas os produtos/programas NOVOS;
+      - permanece na mesa;
+      - NÃO abre pagamento;
+      - NÃO obriga a sair;
+      - depois da gravação, os artigos passam a EXISTENTE e aparecem na Conta.
+    ==========================================================================
+  */
+  async function confirmarConsumos() {
+    if (
+      aEnviar ||
+      aSairMesa ||
+      aAdicionarPrograma ||
+      aGerarConsultaMesa ||
+      aPrepararPagamento ||
+      aEfetuarPagamento
+    ) {
+      return;
+    }
+
+    const identificacao =
+      await gravarProdutosPendentes(
+        false,
+      );
+
+    if (!identificacao) {
+      return;
+    }
+
+    setMostrarResumoConsumosMobile(
+      false,
+    );
+
+    setSeparadorMesa(
+      "CONSUMO",
+    );
+
+    setMensagemOperacao(
+      "Consumos confirmados com sucesso.",
+    );
+  }
+
+  /*
+    Comentários no ResumoConsumos.
+
+    Produto normal:
+      abre diretamente o modal de comentários.
+
+    Programa:
+      abre o editor completo já existente, porque é aí que o operador
+      consegue selecionar um componente específico sem perder a lógica atual.
+  */
+  function editarComentariosConsumo(
+    idLocal: string,
+  ) {
+    const linha =
+      linhasEditor.find(
+        (item) =>
+          item.idLocal ===
+          idLocal,
+      );
+
+    if (!linha) {
+      return;
+    }
+
+    setIdLinhaSelecionada(
+      idLocal,
+    );
+
+    setIdComponenteProgramaSelecionado(
+      null,
+    );
+
+    setMensagemErroOperacao(
+      "",
+    );
+
+    setMostrarResumoConsumosMobile(
+      false,
+    );
+
+    if (
+      linha.tipoItem ===
+      "PROGRAMA"
+    ) {
+      setMensagemOperacao(
+        "Selecione o componente do programa para editar os comentários.",
+      );
+
+      setMostrarPedidoMobile(
+        true,
+      );
+
+      return;
+    }
+
+    setMensagemErroComentariosLinha(
+      "",
+    );
+
+    setIdLinhaComentarioEmEdicao(
+      idLocal,
+    );
+  }
+
+  /*
+    ==========================================================================
     PAGAR DIRETAMENTE A PARTIR DA ABERTURA DA MESA
     ==========================================================================
 
@@ -10919,6 +10412,56 @@ identificacao =
               </button>
             )}
 
+          {modoEditor === "CONTA" &&
+            contaCarregada && (
+              <button
+                type="button"
+                onClick={() =>
+                  setMostrarContasRapidas(
+                    true,
+                  )
+                }
+                disabled={
+                  aEnviar ||
+                  aSairMesa ||
+                  aGerarConsultaMesa ||
+                  aPrepararPagamento ||
+                  aEfetuarPagamento
+                }
+                title="Abrir contas da mesa"
+                aria-label="Abrir contas da mesa"
+                className="flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center gap-1 rounded-xl border border-cyan-200 bg-cyan-50 px-2 text-sm font-bold text-cyan-800 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50 active:scale-95 sm:h-11 sm:w-auto sm:gap-2 sm:px-4"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-5 w-5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 3h12a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2-2-1.33V4a1 1 0 0 1 1-1Z"
+                  />
+
+                  <path
+                    strokeLinecap="round"
+                    d="M8 8h8M8 12h8M8 16h5"
+                  />
+                </svg>
+
+                <span className="hidden sm:inline">
+                  Contas
+                </span>
+
+                <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-black text-cyan-800 shadow-sm">
+                  {contasRapidas.length}
+                </span>
+              </button>
+            )}
+
           <button
             type="button"
             onClick={() =>
@@ -11004,7 +10547,222 @@ identificacao =
           </button>
         </div>
       </header>
-      <div className="grid min-h-0 grid-cols-1 lg:min-h-[calc(100dvh-5rem)] lg:grid-cols-[220px_minmax(0,1fr)_390px] 2xl:grid-cols-[180px_minmax(0,1fr)_420px]">
+
+      {/*
+        ============================================================
+        NAVEGAÇÃO MOBILE: CONSUMO / CONTA
+
+        "Conta" abre o painel mobile já existente. Desta forma
+        testamos a navegação do Kotlin sem duplicar o EditorPedidoTable
+        nem qualquer regra de negócio.
+        ============================================================
+      */}
+      <div className="border-b border-slate-200 bg-white lg:hidden">
+        <TabsConsumoConta
+          separador={
+            separadorMesa
+          }
+          totalItens={
+            totalItensPedido
+          }
+          disabled={
+            aEnviar ||
+            aSairMesa ||
+            aGerarConsultaMesa ||
+            aPrepararPagamento ||
+            aEfetuarPagamento
+          }
+          onAlterar={(
+            novoSeparador,
+          ) => {
+            setSeparadorMesa(
+              novoSeparador,
+            );
+
+            setMostrarResumoConsumosMobile(
+              false,
+            );
+
+            setMostrarPedidoMobile(
+              false,
+            );
+          }}
+        />
+      </div>
+
+      {/*
+        ============================================================
+        MOBILE - FLUXO KOTLIN
+
+        CONSUMO:
+          catálogo + novos consumos por confirmar.
+
+        CONTA:
+          apenas linhas persistidas + Consulta / Segue / Pagar.
+
+        O desktop mantém o layout profissional de 3 colunas que já existia.
+        ============================================================
+      */}
+      <div className="lg:hidden">
+        {separadorMesa ===
+        "CONSUMO" ? (
+          grupoLinkAtivo ? (
+            <section className="min-w-0 p-3 sm:p-5">
+              <CatalogoGrupoLink
+                idGrupo={
+                  grupoLinkAtivo.idGrupo
+                }
+                idSala={
+                  dadosMesa?.idSala ??
+                  0
+                }
+                descricaoOrigem={
+                  grupoLinkAtivo.descricaoOrigem
+                }
+                fechaJanelaLinkOrigem={
+                  grupoLinkAtivo.fechaJanelaLink
+                }
+                onVoltar={() => {
+                  setGrupoLinkAtivo(
+                    null,
+                  );
+
+                  setMensagemErroOperacao(
+                    "",
+                  );
+                }}
+                onSelecionarProduto={
+                  selecionarProdutoGrupoLink
+                }
+              />
+            </section>
+          ) : (
+            <EditorConsumo
+              catalogo={
+                catalogo
+              }
+              idGrupoSelecionado={
+                idGrupoSelecionado
+              }
+              idPaginaSelecionada={
+                idPaginaSelecionada
+              }
+              pesquisa={
+                pesquisa
+              }
+              aAdicionarPrograma={
+                aAdicionarPrograma
+              }
+              produtoAdicionadoFeedback={
+                produtoAdicionadoFeedback
+              }
+              onSelecionarGrupo={
+                selecionarGrupo
+              }
+              onSelecionarPagina={
+                selecionarPagina
+              }
+              onPesquisaChange={
+                setPesquisa
+              }
+              onSelecionarBotao={
+                adicionarProduto
+              }
+            />
+          )
+        ) : (
+          <div className="h-[calc(100dvh-7.6rem)] min-h-[420px]">
+            <ContaResumo
+              conta={
+                contaCarregada
+              }
+              linhas={
+                linhasEditor
+              }
+              idLinhaSelecionada={
+                idLinhaSelecionada
+              }
+              aProcessar={
+                aEnviar ||
+                aSairMesa ||
+                aAdicionarPrograma
+              }
+              aGerarConsulta={
+                aGerarConsultaMesa
+              }
+              aAbrirSegue={
+                false
+              }
+              aPagar={
+                aCarregarPagamentos ||
+                aPrepararPagamento ||
+                aEfetuarPagamento
+              }
+              idConsultaMesaGerada={
+                idConsultaMesaGerada
+              }
+              mensagem={
+                mensagemOperacao
+              }
+              mensagemErro={
+                mensagemErroOperacao
+              }
+              onSelecionarLinha={(
+                idLocal,
+              ) => {
+                setIdLinhaSelecionada(
+                  idLocal,
+                );
+
+                setIdComponenteProgramaSelecionado(
+                  null,
+                );
+
+                setMensagemErroOperacao(
+                  "",
+                );
+              }}
+              onEditarLinha={(
+                idLocal,
+              ) => {
+                setIdLinhaSelecionada(
+                  idLocal,
+                );
+
+                setIdComponenteProgramaSelecionado(
+                  null,
+                );
+
+                setMensagemErroOperacao(
+                  "",
+                );
+
+                setMostrarPedidoMobile(
+                  true,
+                );
+              }}
+              onAlterarClientes={
+                abrirAlterarNumeroClientes
+              }
+              onConsulta={
+                abrirConfirmacaoConsultaMesa
+              }
+              onSegue={
+                modoEditor ===
+                  "CONTA" &&
+                contaCarregada
+                  ? abrirSegueManual
+                  : undefined
+              }
+              onPagar={() => {
+                void abrirPagamentos();
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="hidden min-h-0 grid-cols-1 lg:grid lg:min-h-[calc(100dvh-5rem)] lg:grid-cols-[220px_minmax(0,1fr)_390px] 2xl:grid-cols-[180px_minmax(0,1fr)_420px]">
         {!grupoLinkAtivo && (
           <aside className="border-b border-slate-200 bg-white p-3 lg:sticky lg:top-20 lg:flex lg:h-[calc(100dvh-5rem)] lg:min-h-0 lg:self-start lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r lg:p-4">
             <p className="shrink-0 px-2 pb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
@@ -11407,7 +11165,13 @@ identificacao =
             <div className="shrink-0 border-b border-slate-200 bg-white p-3 sm:p-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-black tracking-tight text-slate-950">
-                  Pedido
+                  {modoEditor === "CONTA"
+                    ? (
+                        contaCarregada
+                          ?.descricaoConta ||
+                        `Conta ${contaCarregada?.idConta ?? 1}`
+                      )
+                    : "Pedido"}
                 </h2>
 
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
@@ -11921,116 +11685,209 @@ identificacao =
           final do catálogo.
           ============================================================ */}
 
-      <div
-        className={[
-          "fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 shadow-[0_-12px_30px_rgba(15,23,42,0.12)] backdrop-blur transition-colors duration-200 lg:hidden",
-          produtoAdicionadoFeedback
-            ? "border-blue-300 bg-blue-50/95"
-            : "border-slate-200",
-        ].join(" ")}
-      >
-        <button
-          type="button"
-          onClick={() =>
-            setMostrarPedidoMobile(true)
-          }
-          aria-expanded={
-            mostrarPedidoMobile
-          }
-          aria-controls="pedido-mobile-sheet"
+      {separadorMesa ===
+        "CONSUMO" &&
+        !grupoLinkAtivo && (
+        <div
           className={[
-            "mx-auto flex w-full max-w-2xl touch-manipulation items-center gap-3 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] text-left transition-all duration-150 active:bg-slate-50",
+            "fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 shadow-[0_-12px_30px_rgba(15,23,42,0.12)] backdrop-blur transition-colors duration-200 lg:hidden",
             produtoAdicionadoFeedback
-              ? "scale-[1.01]"
-              : "",
+              ? "border-blue-300 bg-blue-50/95"
+              : "border-slate-200",
           ].join(" ")}
         >
-          <span
+          <button
+            type="button"
+            onClick={() =>
+              setMostrarResumoConsumosMobile(
+                true,
+              )
+            }
+            aria-expanded={
+              mostrarResumoConsumosMobile
+            }
+            aria-controls="resumo-consumos-mobile-sheet"
             className={[
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-md transition-all duration-150",
+              "mx-auto flex w-full max-w-2xl touch-manipulation items-center gap-3 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] text-left transition-all duration-150 active:bg-slate-50",
               produtoAdicionadoFeedback
-                ? "scale-110 bg-emerald-600 shadow-emerald-600/20"
-                : "bg-blue-600 shadow-blue-600/20",
+                ? "scale-[1.01]"
+                : "",
             ].join(" ")}
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-5 w-5"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
+            <span
+              className={[
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-md transition-all duration-150",
+                produtoAdicionadoFeedback
+                  ? "scale-110 bg-emerald-600 shadow-emerald-600/20"
+                  : "bg-blue-600 shadow-blue-600/20",
+              ].join(" ")}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13 5.4 5M7 13l-2 4h13"
-              />
-            </svg>
-          </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="h-5 w-5"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13 5.4 5M7 13l-2 4h13"
+                />
+              </svg>
+            </span>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black text-slate-950">
-                Pedido
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-base font-black text-slate-950">
+                  Consumos
+                </span>
 
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">
-                {totalItensPedido}
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-700">
+                  {totalProdutosNovos}
+                </span>
+              </div>
+
+              <p
+                className={[
+                  "truncate text-[10px] font-semibold transition-colors",
+                  produtoAdicionadoFeedback
+                    ? "text-emerald-700"
+                    : "text-slate-400",
+                ].join(" ")}
+              >
+                {produtoAdicionadoFeedback
+                  ? "✓ Produto adicionado"
+                  : totalLinhasNovas > 0
+                    ? `${totalLinhasNovas} ${
+                        totalLinhasNovas === 1
+                          ? "linha por confirmar"
+                          : "linhas por confirmar"
+                      }`
+                    : "Sem novos consumos"}
+              </p>
+            </div>
+
+            <div className="shrink-0 text-right">
+              <strong className="block whitespace-nowrap text-base font-black text-slate-950">
+                {formatarValor(
+                  totalValorProdutosNovos,
+                )}
+              </strong>
+
+              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                Por confirmar
               </span>
             </div>
 
-            <p
-              className={[
-                "truncate text-[10px] font-semibold transition-colors",
-                produtoAdicionadoFeedback
-                  ? "text-emerald-700"
-                  : "text-slate-400",
-              ].join(" ")}
-            >
-              {produtoAdicionadoFeedback ? (
-                <>✓ Produto adicionado</>
-              ) : (
-                <>
-                  {totalLinhasExistentes}{" "}
-                  existentes
-                  {" · "}
-                  {totalLinhasNovas} novos
-                </>
-              )}
-            </p>
-          </div>
-
-          <div className="shrink-0 text-right">
-            <strong className="block whitespace-nowrap text-base font-black text-slate-950">
-              {formatarValor(totalEditor)}
-            </strong>
-
-            <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-              {totalItensPedido === 1
-                ? "1 item"
-                : `${totalItensPedido} itens`}
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="h-5 w-5"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m6 15 6-6 6 6"
+                />
+              </svg>
             </span>
-          </div>
+          </button>
+        </div>
+      )}
 
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-5 w-5"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m6 15 6-6 6 6"
+      {mostrarResumoConsumosMobile && (
+        <div className="fixed inset-0 z-[72] lg:hidden">
+          <button
+            type="button"
+            aria-label="Fechar consumos"
+            onClick={() =>
+              setMostrarResumoConsumosMobile(
+                false,
+              )
+            }
+            className="absolute inset-0 bg-slate-950/35 backdrop-blur-[1px]"
+          />
+
+          <section
+            id="resumo-consumos-mobile-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Novos consumos"
+            className="absolute inset-x-0 bottom-0 flex h-[84dvh] max-h-[84dvh] flex-col overflow-hidden rounded-t-[28px] border-t border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="relative shrink-0 bg-white pt-2">
+              <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300" />
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMostrarResumoConsumosMobile(
+                    false,
+                  )
+                }
+                aria-label="Fechar consumos"
+                className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition active:bg-slate-200"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-5 w-5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    d="M6 6l12 12M18 6 6 18"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1">
+              <ResumoConsumos
+                linhas={
+                  linhasEditor
+                }
+                aConfirmar={
+                  aEnviar
+                }
+                disabled={
+                  aSairMesa ||
+                  aAdicionarPrograma ||
+                  aGerarConsultaMesa ||
+                  aPrepararPagamento ||
+                  aEfetuarPagamento
+                }
+                mensagem={
+                  mensagemOperacao
+                }
+                mensagemErro={
+                  mensagemErroOperacao
+                }
+                onAlterarQuantidade={
+                  alterarQuantidade
+                }
+                onRemoverLinha={
+                  removerLinha
+                }
+                onEditarComentarios={
+                  editarComentariosConsumo
+                }
+                onConfirmarConsumos={() => {
+                  void confirmarConsumos();
+                }}
               />
-            </svg>
-          </span>
-        </button>
-      </div>
+            </div>
+          </section>
+        </div>
+      )}
 
       {mostrarPedidoMobile && (
         <div className="fixed inset-0 z-[70] lg:hidden">
@@ -12049,7 +11906,7 @@ identificacao =
             id="pedido-mobile-sheet"
             role="dialog"
             aria-modal="true"
-            aria-label="Pedido"
+            aria-label="Detalhes da conta"
             className="absolute inset-x-0 bottom-0 flex h-[82dvh] max-h-[82dvh] flex-col overflow-hidden rounded-t-[28px] border-t border-slate-200 bg-white shadow-2xl"
           >
             <div className="shrink-0 pt-2">
@@ -12076,7 +11933,9 @@ identificacao =
 
               <div className="min-w-0 flex-1">
                 <h2 className="text-xl font-black tracking-tight text-slate-950">
-                  Pedido
+                  {modoEditor === "CONTA"
+                    ? "Detalhes da conta"
+                    : "Detalhes dos consumos"}
                 </h2>
 
                 <p className="text-xs font-semibold text-slate-400">
@@ -12498,6 +12357,62 @@ identificacao =
         </div>
       )}
 
+      <ContasRapidasDrawer
+        open={
+          mostrarContasRapidas
+        }
+        descricaoMesa={
+          dadosMesa?.descricaoMesa ??
+          "Mesa"
+        }
+        descricaoSala={
+          dadosMesa?.descricaoSala ??
+          ""
+        }
+        contas={
+          contasRapidas
+        }
+        aCarregar={
+          false
+        }
+        idInternoContaEmProcessamento={
+          aPrepararPagamento ||
+          aEfetuarPagamento
+            ? contaCarregada
+                ?.idInterno ??
+              null
+            : null
+        }
+        mensagemErro={
+          mensagemErroOperacao
+        }
+        onFechar={() =>
+          setMostrarContasRapidas(
+            false,
+          )
+        }
+        onAbrirConta={() => {
+          setMostrarContasRapidas(
+            false,
+          );
+
+          setSeparadorMesa(
+            "CONTA",
+          );
+        }}
+        onPagarConta={() => {
+          setMostrarContasRapidas(
+            false,
+          );
+
+          setSeparadorMesa(
+            "CONTA",
+          );
+
+          void abrirPagamentos();
+        }}
+      />
+
       <PagamentoDrawer
         aberto={
           mostrarPagamentos
@@ -12605,31 +12520,6 @@ identificacao =
         ) => {
           void associarReservaHotel(
             reserva,
-          );
-        }}
-      />
-
-      <AbrirCaixaModal
-        mostrar={
-          mostrarAbrirCaixa
-        }
-        caixa={
-          caixaPendente
-        }
-        aAbrir={
-          aAbrirCaixa
-        }
-        mensagemErro={
-          mensagemErroCaixa
-        }
-        onCancelar={
-          cancelarAberturaCaixa
-        }
-        onConfirmar={(
-          fundoCaixa,
-        ) => {
-          void confirmarAberturaCaixa(
-            fundoCaixa,
           );
         }}
       />
@@ -13837,177 +13727,6 @@ identificacao =
           }}
         />
       )}
-
-      <Modal>
-        <Modal.Backdrop
-          isOpen={
-            produtoAssociadoPendente !==
-            null
-          }
-          isDismissable={
-            false
-          }
-          isKeyboardDismissDisabled={
-            true
-          }
-          variant="blur"
-        >
-          <Modal.Container
-            placement="center"
-            size="sm"
-          >
-            <Modal.Dialog
-              aria-labelledby="titulo-produto-associado"
-              aria-describedby="descricao-produto-associado"
-            >
-              {/*
-                Tal como no POS legado, a decisão é explícita:
-                  Sim      -> lança o associado;
-                  Não      -> não lança;
-                  Cancelar -> não lança.
-
-                O produto principal já foi adicionado e nunca é
-                removido por esta confirmação.
-              */}
-
-              <Modal.Header>
-                <Modal.Heading
-                  id="titulo-produto-associado"
-                >
-                  Produto associado
-                </Modal.Heading>
-              </Modal.Header>
-
-              <Modal.Body>
-                <div
-                  id="descricao-produto-associado"
-                  className="
-                    space-y-3
-                    text-sm
-                    leading-6
-                    text-slate-600
-                  "
-                >
-                  <p>
-                    Deseja lançar o produto associado?
-                  </p>
-
-                  <p className="text-base font-black text-slate-950">
-                    {
-                      produtoAssociadoPendente
-                        ?.produtoAssociado
-                        .descricao ||
-                      `Produto ${
-                        produtoAssociadoPendente
-                          ?.produtoAssociado
-                          .idProduto ??
-                        ""
-                      }`
-                    }
-                  </p>
-
-                  {produtoAssociadoPendente
-                    ?.produtoAssociado
-                    .precoEncontrado && (
-                    <p className="font-bold text-emerald-700">
-                      {formatarValor(
-                        produtoAssociadoPendente
-                          .produtoAssociado
-                          .preco,
-                      )}
-                    </p>
-                  )}
-                </div>
-              </Modal.Body>
-
-              <Modal.Footer>
-                <div
-                  className="
-                    grid
-                    w-full
-                    grid-cols-3
-                    gap-3
-                  "
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      responderProdutoAssociado(
-                        false,
-                      );
-                    }}
-                    className="
-                      h-12
-                      rounded-xl
-                      border
-                      border-slate-200
-                      bg-white
-                      text-sm
-                      font-black
-                      text-slate-600
-                      shadow-sm
-                      transition
-                      hover:bg-slate-50
-                      active:scale-[0.99]
-                    "
-                  >
-                    Cancelar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      responderProdutoAssociado(
-                        false,
-                      );
-                    }}
-                    className="
-                      h-12
-                      rounded-xl
-                      border
-                      border-slate-200
-                      bg-white
-                      text-sm
-                      font-black
-                      text-slate-700
-                      shadow-sm
-                      transition
-                      hover:bg-slate-50
-                      active:scale-[0.99]
-                    "
-                  >
-                    Não
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      responderProdutoAssociado(
-                        true,
-                      );
-                    }}
-                    className="
-                      h-12
-                      rounded-xl
-                      bg-emerald-600
-                      text-sm
-                      font-black
-                      text-white
-                      shadow-md
-                      shadow-emerald-600/20
-                      transition
-                      hover:bg-emerald-700
-                      active:scale-[0.99]
-                    "
-                  >
-                    Sim
-                  </button>
-                </div>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
 
       <ProgramaParcialModal
         aberto={

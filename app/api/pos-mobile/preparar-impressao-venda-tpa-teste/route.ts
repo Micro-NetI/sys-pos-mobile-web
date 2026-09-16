@@ -16,6 +16,28 @@ export const maxDuration = 120;
 
 /*
   ============================================================================
+  LOG TEMPORÁRIO DO JSON DE IMPRESSÃO
+  ============================================================================
+
+  Colocar false depois de terminarem os testes com o Kotlin.
+
+  ATENÇÃO:
+    o JSON da fatura pode conter:
+      - nome do cliente;
+      - NIF;
+      - morada;
+      - dados fiscais;
+      - produtos;
+      - pagamentos.
+
+  Por isso este log deve ser apenas temporário.
+  ============================================================================
+*/
+const LOG_JSON_IMPRESSAO_TPA =
+  true;
+
+/*
+  ============================================================================
   PEDIDO
   ============================================================================
 */
@@ -86,6 +108,11 @@ function respostaErro(
 function obterStatusResposta(
   codigo: string,
 ): number {
+  const codigoNormalizado =
+    codigo
+      .trim()
+      .toUpperCase();
+
   if (
     [
       "TOKEN_OBRIGATORIO",
@@ -94,7 +121,9 @@ function obterStatusResposta(
       "SESSAO_EXPIRADA",
       "SESSAO_SEM_POSTO",
       "SESSAO_SEM_UTILIZADOR",
-    ].includes(codigo)
+    ].includes(
+      codigoNormalizado,
+    )
   ) {
     return 401;
   }
@@ -104,13 +133,16 @@ function obterStatusResposta(
       "PEDIDO_INVALIDO",
       "DADOS_IMPRESSAO_INVALIDOS",
       "DOCUMENTO_VENDA_INVALIDO",
-    ].includes(codigo)
+    ].includes(
+      codigoNormalizado,
+    )
   ) {
     return 400;
   }
 
   if (
-    codigo === "SISTEMA_OCUPADO"
+    codigoNormalizado ===
+    "SISTEMA_OCUPADO"
   ) {
     return 503;
   }
@@ -119,7 +151,9 @@ function obterStatusResposta(
     [
       "IMPRESSAO_TPA_SEM_DADOS",
       "ERRO_PREPARAR_IMPRESSAO_TPA",
-    ].includes(codigo)
+    ].includes(
+      codigoNormalizado,
+    )
   ) {
     return 500;
   }
@@ -156,6 +190,18 @@ export async function POST(
   let pedido:
     PrepararImpressaoVendaTPATestePedido;
 
+  const inicioMs =
+    Date.now();
+
+  /*
+    Identificador apenas para conseguirmos seguir
+    esta chamada nos logs.
+
+    Não tem qualquer significado funcional.
+  */
+  const diagnosticoId =
+    `TPA-PRINT-${inicioMs}`;
+
   /*
     ==========================================================================
     LER JSON
@@ -167,6 +213,13 @@ export async function POST(
       (await request.json()) as
         PrepararImpressaoVendaTPATestePedido;
   } catch {
+    console.error(
+      "[TPA PRINT JSON] JSON inválido.",
+      {
+        diagnosticoId,
+      },
+    );
+
     return respostaErro(
       400,
       "JSON_INVALIDO",
@@ -185,6 +238,18 @@ export async function POST(
       "string" ||
     pedido.accessToken.trim() === ""
   ) {
+    console.error(
+      "[TPA PRINT JSON] Token não indicado.",
+      {
+        diagnosticoId,
+
+        idVndCabDocumento:
+          pedido
+            ?.idVndCabDocumento ??
+          null,
+      },
+    );
+
     return respostaErro(
       401,
       "TOKEN_OBRIGATORIO",
@@ -204,12 +269,49 @@ export async function POST(
     ) ||
     pedido.idVndCabDocumento <= 0
   ) {
+    console.error(
+      "[TPA PRINT JSON] Documento inválido.",
+      {
+        diagnosticoId,
+
+        idVndCabDocumento:
+          pedido.idVndCabDocumento,
+      },
+    );
+
     return respostaErro(
       400,
       "DOCUMENTO_VENDA_INVALIDO",
       "O identificador do documento de venda é inválido.",
     );
   }
+
+  /*
+    ==========================================================================
+    LOG DO PEDIDO
+
+    Não mostramos accessToken.
+    ==========================================================================
+  */
+
+  console.log(
+    "============================================================",
+  );
+
+  console.log(
+    "[TPA PRINT JSON 01] PEDIDO",
+    {
+      diagnosticoId,
+
+      hora:
+        new Date(
+          inicioMs,
+        ).toISOString(),
+
+      idVndCabDocumento:
+        pedido.idVndCabDocumento,
+    },
+  );
 
   /*
     ==========================================================================
@@ -232,7 +334,133 @@ export async function POST(
         },
       );
 
+    const fimMs =
+      Date.now();
+
     /*
+      ========================================================================
+      LOG RESUMIDO
+      ========================================================================
+    */
+
+    console.log(
+      "[TPA PRINT JSON 02] RESPOSTA APIFNT",
+      {
+        diagnosticoId,
+
+        hora:
+          new Date(
+            fimMs,
+          ).toISOString(),
+
+        duracaoMs:
+          fimMs -
+          inicioMs,
+
+        idVndCabDocumento:
+          pedido.idVndCabDocumento,
+
+        sucesso:
+          resultado.sucesso,
+
+        codigo:
+          resultado.codigo,
+
+        mensagem:
+          resultado.mensagem,
+
+        temDados:
+          resultado.dados !==
+          null,
+      },
+    );
+
+    /*
+      ========================================================================
+      JSON COMPLETO PARA COPIAR PARA O KOTLIN
+      ========================================================================
+
+      Este é o log que nos interessa.
+
+      Vai aparecer no terminal onde está a correr o Next:
+
+        [TPA PRINT JSON COMPLETO]
+
+      O JSON fica formatado com indentação de 2 espaços para ser
+      diretamente copiável para um ficheiro .json ou para testes Kotlin.
+      ========================================================================
+    */
+
+    if (
+      LOG_JSON_IMPRESSAO_TPA
+    ) {
+      console.log(
+        "================ JSON FATURA / TPA =================",
+      );
+
+      console.log(
+        "[TPA PRINT JSON COMPLETO]",
+      );
+
+      console.log(
+        JSON.stringify(
+          resultado,
+          null,
+          2,
+        ),
+      );
+
+      console.log(
+        "============== FIM JSON FATURA / TPA ===============",
+      );
+    }
+
+    /*
+      ========================================================================
+      APENAS O OBJETO dados
+
+      Também imprimimos isoladamente o payload que interessa ao Android.
+
+      Assim tens duas versões no log:
+
+        1. envelope completo:
+             sucesso/codigo/mensagem/versaoContrato/dados
+
+        2. apenas:
+             dados
+
+      Para testes dos modelos Kotlin normalmente a segunda é especialmente
+      útil.
+      ========================================================================
+    */
+
+    if (
+      LOG_JSON_IMPRESSAO_TPA &&
+      resultado.dados
+    ) {
+      console.log(
+        "================ JSON DADOS TPA =====================",
+      );
+
+      console.log(
+        "[TPA PRINT JSON DADOS]",
+      );
+
+      console.log(
+        JSON.stringify(
+          resultado.dados,
+          null,
+          2,
+        ),
+      );
+
+      console.log(
+        "============== FIM JSON DADOS TPA ===================",
+      );
+    }
+
+    /*
+      ========================================================================
       A resposta já vem no envelope normal:
 
         {
@@ -242,6 +470,7 @@ export async function POST(
           versaoContrato,
           dados
         }
+      ========================================================================
     */
 
     return NextResponse.json(
@@ -257,13 +486,49 @@ export async function POST(
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
+
+          /*
+            Ajuda apenas a correlacionar a chamada nos testes.
+
+            Não contém qualquer dado funcional ou sensível.
+          */
+          "X-TPA-Print-Trace-Id":
+            diagnosticoId,
         },
       },
     );
   } catch (error) {
+    const fimMs =
+      Date.now();
+
     console.error(
-      "Erro ao preparar impressão de venda TPA:",
-      error,
+      "[TPA PRINT JSON ERRO] Erro ao preparar impressão de venda TPA:",
+      {
+        diagnosticoId,
+
+        hora:
+          new Date(
+            fimMs,
+          ).toISOString(),
+
+        duracaoMs:
+          fimMs -
+          inicioMs,
+
+        idVndCabDocumento:
+          pedido.idVndCabDocumento,
+
+        erro:
+          error instanceof Error
+            ? error.message
+            : String(
+                error,
+              ),
+      },
+    );
+
+    console.log(
+      "============================================================",
     );
 
     return respostaErro(
